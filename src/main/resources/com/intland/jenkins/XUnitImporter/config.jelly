@@ -1,0 +1,51 @@
+<?jelly escape-by-default='true'?>
+<j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define" xmlns:l="/lib/layout" xmlns:t="/lib/hudson" xmlns:f="/lib/form">
+    <f:entry title="Uri" field="uri">
+      <f:textbox />
+    </f:entry>
+    <f:entry title="Username" field="username">
+      <f:textbox />
+    </f:entry>
+    <f:entry title="Password" field="password">
+      <f:password />
+    </f:entry>
+    <f:entry title="Test Configuration Item ID" field="testConfigurationId">
+      <f:textbox />
+    </f:entry>
+    <f:entry title="Test Set Tracker ID" field="testSetTrackerId">
+      <f:textbox />
+    </f:entry>
+    <f:entry title="Test Case Tracker ID" field="testCaseTrackerId">
+      <f:textbox />
+    </f:entry>
+    <f:entry title="Test Case Top Node ID (optional)" field="testCaseParentId" help="/plugin/codebeamer-xunit-importer/help/help-testCaseParentId.html">
+      <f:textbox />
+    </f:entry>
+    <f:entry title="Test Run Tracker ID" field="testRunTrackerId">
+      <f:textbox />
+    </f:entry>
+    <f:entry title="Bug Tracker ID (optional)" field="bugTrackerId" help="/plugin/codebeamer-xunit-importer/help/help-bugTrackerId.html">
+      <f:textbox />
+    </f:entry>
+    <f:entry title="Number of Bugs to report (optional)" field="numberOfBugsToReport" help="/plugin/codebeamer-xunit-importer/help/help-numberOfBugsToReport.html">
+      <f:textbox default="10" />
+    </f:entry>
+    <f:entry title="Requirement Tracker ID (optional)" field="requirementTrackerId" help="/plugin/codebeamer-xunit-importer/help/help-requirementTrackerId.html">
+      <f:textbox />
+    </f:entry>
+    <f:entry title="Requirement Top Node ID (optional)" field="requirementParentId" help="/plugin/codebeamer-xunit-importer/help/help-requirementParentId.html">
+      <f:textbox />
+    </f:entry>
+    <f:entry title="Requirement Depth (optional)" field="requirementDepth" help="/plugin/codebeamer-xunit-importer/help/help-requirementDepth.html">
+      <f:textbox />
+    </f:entry>
+    <f:entry title="Include Packages (optional)" field="includedPackages" help="/plugin/codebeamer-xunit-importer/help/help-includedPackages.html">
+      <f:textbox />
+    </f:entry>
+    <f:entry title="Exclude Packages (optional)" field="excludedPackages" help="/plugin/codebeamer-xunit-importer/help/help-excludedPackages.html">
+      <f:textbox />
+    </f:entry>
+    <f:entry title="Truncate Package Tree (optional)" field="truncatePackageTree" help="/plugin/codebeamer-xunit-importer/help/help-truncatePackageTree.html">
+      <f:textbox />
+    </f:entry>
+</j:jelly>
