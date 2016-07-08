@@ -6,6 +6,7 @@ package com.intland.jenkins.api;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.intland.jenkins.XUnitUtil;
 import com.intland.jenkins.api.dto.*;
+import com.intland.jenkins.api.dto.trackerschema.TrackerSchemaDto;
 import com.intland.jenkins.dto.NodeMapping;
 import com.intland.jenkins.dto.PluginConfiguration;
 import com.intland.jenkins.dto.TestResultItem;
@@ -32,7 +33,9 @@ import java.util.*;
 
 public class CodebeamerApiClient {
     private final String DEFAULT_TESTSET_NAME = "Jenkins-TestSet";
+    private final String TEST_CASE_TYPE_NAME = "Automated";
     private final int HTTP_TIMEOUT = 10000;
+    private boolean isTestCaseTypeSupported = false;
     private HttpClient client;
     private RequestConfig requestConfig;
     private PluginConfiguration pluginConfiguration;
@@ -56,8 +59,12 @@ public class CodebeamerApiClient {
 
     public void postTestRuns(TestResults tests, AbstractBuild<?, ?> build) throws IOException {
         String buildIdentifier = getBuildIdentifier(build);
-        XUnitUtil.log(listener, "Start uploading");
+        XUnitUtil.log(listener, "Starting xUnit tests upload");
+        XUnitUtil.log(listener, "Checking supported Test Case types");
+        isTestCaseTypeSupported = isTestCaseTypeSupported();
+        XUnitUtil.log(listener, String.format("Test Case type: %s, supported: %s", TEST_CASE_TYPE_NAME, isTestCaseTypeSupported));
 
+        XUnitUtil.log(listener, "Fetching Test Cases");
         TrackerItemDto[] testCases = getTrackerItems(pluginConfiguration.getTestCaseTrackerId());
         NodeMapping testCasesMap = XUnitUtil.getNodeMapping(testCases);
 
@@ -65,16 +72,20 @@ public class CodebeamerApiClient {
         NodeMapping requirementsNodeMapping = null;
         Map<Integer, TrackerItemDto[]> verifiesMap = new HashMap<>();
         if (pluginConfiguration.getRequirementTrackerId() != null) {
+            XUnitUtil.log(listener, "Fetching Requirements");
             requirements = getTrackerItems(pluginConfiguration.getRequirementTrackerId());
             verifiesMap = XUnitUtil.getVerifiesMap(testCases);
             requirementsNodeMapping = XUnitUtil.getNodeMapping(requirements);
         }
 
-        Integer testSetId = findOrCreateTrackerItem(pluginConfiguration.getTestSetTrackerId(), DEFAULT_TESTSET_NAME + "-" + buildIdentifier, "--");
+        String testSetName = DEFAULT_TESTSET_NAME + "-" + buildIdentifier;
+        XUnitUtil.log(listener, "Creating Test Set: " + testSetName);
+        Integer testSetId = findOrCreateTrackerItem(pluginConfiguration.getTestSetTrackerId(), testSetName, "--");
+        XUnitUtil.log(listener, "Test Set created with id: " + testSetId);
         Map<String, Integer> testCasesForCurrentTestRun = new HashMap<>();
         for (TestResultItem test : tests.getTestResultItems()) {
             Integer testCaseId = findOrCreateTrackerItemInTree(test.getFullName(), pluginConfiguration.getTestCaseTrackerId(), testCasesMap,
-                    pluginConfiguration.getTestCaseParentId(), null);
+                    pluginConfiguration.getTestCaseParentId(), null, "Accepted");
             testCasesForCurrentTestRun.put(test.getFullName(), testCaseId);
 
             // create requirement if needed
@@ -84,12 +95,14 @@ public class CodebeamerApiClient {
         }
 
         TrackerItemDto parentItem = createParentTestRun(tests, buildIdentifier, build, pluginConfiguration.getTestConfigurationId(), testSetId, testCasesForCurrentTestRun.values());
+        XUnitUtil.log(listener, String.format("Parent TestRun created with name: %s and id: %s ", parentItem.getName(), parentItem.getId()));
 
         int uploadCounter = 0;
         int numberOfReportedBugs = 0;
         for (TestResultItem test : tests.getTestResultItems()) {
             Integer testCaseId = testCasesForCurrentTestRun.get(test.getFullName());
             TrackerItemDto createdRun = createTestRun(pluginConfiguration.getTestConfigurationId(), testSetId, parentItem, test, testCaseId);
+            XUnitUtil.log(listener, String.format("TestRun created with name: %s and id: %s ", createdRun.getName(), createdRun.getId()));
             updateTestRunStatusAndSpentTime(createdRun.getId(), "Completed", (long)(test.getDuration() * 1000));
 
             if (isReportingBugNeeded(test, numberOfReportedBugs)) {
@@ -106,6 +119,13 @@ public class CodebeamerApiClient {
         updateTestSetTestCases(testSetId, testCasesForCurrentTestRun.values());
         updateTrackerItemStatus(testSetId, "Completed");
         XUnitUtil.log(listener, "Upload finished, uploaded: " + uploadCounter + " test runs");
+    }
+
+    private boolean isTestCaseTypeSupported() throws IOException {
+        String url = String.format("%s/rest/tracker/%s/schema", baseUrl, pluginConfiguration.getTestCaseTrackerId());
+        String json = get(url);
+        TrackerSchemaDto trackerSchemaDto = objectMapper.readValue(json, TrackerSchemaDto.class);
+        return trackerSchemaDto.doesTypeContain(TEST_CASE_TYPE_NAME);
     }
 
     private boolean isReportingBugNeeded(TestResultItem test, int numberOfReportedBugs) throws IOException  {
@@ -177,7 +197,7 @@ public class CodebeamerApiClient {
 
     private void createRequirementInTree(Map<Integer, TrackerItemDto[]> verifiesMap, NodeMapping requirementsNodeMapping, TestResultItem test, Integer testCaseId) throws IOException {
         Integer requirementId = findOrCreateTrackerItemInTree(test.getFullName(), pluginConfiguration.getRequirementTrackerId(),
-                requirementsNodeMapping, pluginConfiguration.getRequirementParentId(), pluginConfiguration.getRequirementDepth());
+                requirementsNodeMapping, pluginConfiguration.getRequirementParentId(), pluginConfiguration.getRequirementDepth(), null);
         updateTestCaseVerifies(testCaseId, requirementId);
         verifiesMap.put(testCaseId, new TrackerItemDto[]{new TrackerItemDto()});
     }
@@ -206,7 +226,7 @@ public class CodebeamerApiClient {
         return build.getProject().getName() + "#" + build.getNumber();
     }
 
-    private Integer findOrCreateTrackerItemInTree(String fullName, Integer trackerId, NodeMapping nodeMapping, Integer folder, Integer limit) throws IOException {
+    private Integer findOrCreateTrackerItemInTree(String fullName, Integer trackerId, NodeMapping nodeMapping, Integer folder, Integer limit, String status) throws IOException {
         fullName = XUnitUtil.limitName(fullName, limit, ".");
 
         if (folder != null && nodeMapping.getIdNodeMapping().get(folder) != null) {
@@ -223,8 +243,11 @@ public class CodebeamerApiClient {
 
                 if (nodeMapping.getNodeIdMapping().get(segment) == null) {
                     result = postTrackerItemWithParent(segment, trackerId, result);
-                    //updateTrackerItemStatus(result, "Accepted");
                     nodeMapping.getNodeIdMapping().put(segment, result);
+
+                    if (status != null) {
+                        updateTrackerItemStatus(result, status);
+                    }
                 } else {
                     result = nodeMapping.getNodeIdMapping().get(segment);
                 }
@@ -239,7 +262,12 @@ public class CodebeamerApiClient {
         String tracker = String.format("/tracker/%s", trackerId);
         TestRunDto testCaseDto = new TestRunDto(name, tracker, parentId);
         testCaseDto.setDescription("--");
-        testCaseDto.setType(trackerId.equals(pluginConfiguration.getTestCaseTrackerId()) ? "Automated" : null);
+
+        // Tracker is a test case tracker and type is supported
+        if (trackerId.equals(pluginConfiguration.getTestCaseTrackerId()) && isTestCaseTypeSupported) {
+            testCaseDto.setType(TEST_CASE_TYPE_NAME);
+        }
+
         String content = objectMapper.writeValueAsString(testCaseDto);
         return post(content).getId();
     }
