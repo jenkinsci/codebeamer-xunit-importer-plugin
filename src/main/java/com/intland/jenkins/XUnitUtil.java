@@ -12,7 +12,7 @@ import hudson.tasks.junit.TestResult;
 import hudson.tasks.test.AbstractTestResultAction;
 import hudson.tasks.test.AggregatedTestResultAction;
 
-import java.io.UnsupportedEncodingException;
+import java.io.*;
 import java.net.URLEncoder;
 import java.text.SimpleDateFormat;
 import java.util.*;
@@ -122,6 +122,25 @@ public class XUnitUtil {
     public static void log(BuildListener listener, String message) {
         String log = String.format("%s %s", DATE_FORMAT.format(new Date()), message);
         listener.getLogger().println(log);
+    }
+
+    public static String getStringFromInputStream(InputStream is) throws IOException {
+        BufferedReader bufferedReader = null;
+        StringBuilder stringBuilder = new StringBuilder();
+
+        String line;
+        try {
+            bufferedReader = new BufferedReader(new InputStreamReader(is));
+            while ((line = bufferedReader.readLine()) != null) {
+                stringBuilder.append(line);
+            }
+        } finally {
+            if (bufferedReader != null) {
+                bufferedReader.close();
+            }
+        }
+
+        return stringBuilder.toString();
     }
 
     public static String encodeParam(String param) {

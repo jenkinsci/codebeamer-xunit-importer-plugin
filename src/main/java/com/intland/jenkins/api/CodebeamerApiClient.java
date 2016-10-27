@@ -14,11 +14,13 @@ import com.intland.jenkins.dto.TestResults;
 import com.intland.jenkins.markup.*;
 import hudson.model.AbstractBuild;
 import hudson.model.BuildListener;
+import hudson.util.IOUtils;
 import org.apache.http.HttpResponse;
 import org.apache.http.auth.AuthScope;
 import org.apache.http.auth.UsernamePasswordCredentials;
 import org.apache.http.client.CredentialsProvider;
 import org.apache.http.client.HttpClient;
+import org.apache.http.client.HttpResponseException;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
@@ -28,7 +30,10 @@ import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.apache.http.impl.client.BasicResponseHandler;
 import org.apache.http.impl.client.HttpClientBuilder;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.StringWriter;
 import java.util.*;
 
 public class CodebeamerApiClient {
@@ -140,13 +145,18 @@ public class CodebeamerApiClient {
 
     private boolean isTrackerItemWithNameAndStatusExist(TestResultItem test) throws IOException {
         String name = generateNameOfBug(test);
-        String urlName = XUnitUtil.encodeParam(name);
-        // having double at //rest url causes criteria issues (second param does not get resolved)
-        String url = String.format(baseUrl + "%srest/tracker/%s/items/and/status=Open;name=%s/page/1",
-                baseUrl.charAt(baseUrl.length() - 1) == '/' ? "" : "/", pluginConfiguration.getBugTrackerId(), urlName);
+        String cbQl = XUnitUtil.encodeParam(String.format("tracker.id IN ('%s') AND workItemStatus IN ('Unset','InProgress') " +
+                "AND summary LIKE '%s'", pluginConfiguration.getBugTrackerId(), name));
+
+        String url = String.format("%s/rest/query/page/1?queryString=%s&pagesize=1", baseUrl, cbQl);
         String content = get(url);
         PagedTrackerItemsDto pagedTrackerItemsDto = objectMapper.readValue(content, PagedTrackerItemsDto.class);
-        return pagedTrackerItemsDto.getTotal() > 0;
+        boolean itemExists = pagedTrackerItemsDto.getTotal() > 0;
+        if (itemExists) {
+            XUnitUtil.log(listener, String.format("Unresolved bug with name: %s already exists, skipping Bug report creation", name));
+        }
+
+        return itemExists;
     }
 
     private TrackerItemDto createBug(TestResultItem test, TrackerItemDto createdRun) throws IOException {
@@ -165,7 +175,12 @@ public class CodebeamerApiClient {
     private TrackerItemDto createTestRun(Integer testConfigurationId, Integer testSetId, TrackerItemDto parentItem, TestResultItem test, Integer testCaseId) throws IOException {
         TestRunDto testRunDto = new TestRunDto(test.getName(), parentItem.getId(), pluginConfiguration.getTestRunTrackerId(),
                 Arrays.asList(new Integer[]{testCaseId}), testConfigurationId, test.getResult());
-        testRunDto.setDescription("--");
+        if (test.getErrorDetail() != null) {
+            testRunDto.setDescription(String.format("{{{%s}}}", test.getErrorDetail()));
+            testRunDto.setDescFormat("Wiki");
+        } else {
+            testRunDto.setDescription("--");
+        }
         testRunDto.setTestSet(testSetId);
         return postTrackerItem(testRunDto);
     }
@@ -283,7 +298,7 @@ public class CodebeamerApiClient {
         PagedTrackerItemsDto pagedTrackerItemsDto = objectMapper.readValue(json, PagedTrackerItemsDto.class);
 
         int numberOfRequests = (pagedTrackerItemsDto.getTotal() / 500) + 1;
-        List<TrackerItemDto> items = Arrays.asList(pagedTrackerItemsDto.getItems());
+        List<TrackerItemDto> items = new ArrayList(Arrays.asList(pagedTrackerItemsDto.getItems()));
         for (int i = 2; i < numberOfRequests; i++) {
             url = String.format("%s/rest/tracker/%s/items/page/%s?pagesize=500", baseUrl, trackerId, numberOfRequests);
             json = get(url);
@@ -362,10 +377,18 @@ public class CodebeamerApiClient {
         post.setEntity(stringEntity);
 
         HttpResponse response = client.execute(post);
-        String json  = new BasicResponseHandler().handleResponse(response);
-        post.releaseConnection();
-
-        return objectMapper.readValue(json, TrackerItemDto.class);
+        int statusCode = response.getStatusLine().getStatusCode();
+        if (statusCode == 201) {
+            String json = new BasicResponseHandler().handleResponse(response);
+            post.releaseConnection();
+            return objectMapper.readValue(json, TrackerItemDto.class);
+        } else {
+            InputStream responseStream = response.getEntity().getContent();
+            String error = XUnitUtil.getStringFromInputStream(responseStream);
+            XUnitUtil.log(listener, "ERROR: " + error);
+            post.releaseConnection();
+            throw new IOException("post returned with status code: " + statusCode);
+        }
     }
 
     private TrackerItemDto put(String content) throws IOException {
