@@ -37,9 +37,10 @@ import java.io.StringWriter;
 import java.util.*;
 
 public class CodebeamerApiClient {
+    public static final int HTTP_TIMEOUT_LONG = 30000;
+    public static final int HTTP_TIMEOUT_SHORT = 10000;
     private final String DEFAULT_TESTSET_NAME = "Jenkins-TestSet";
     private final String TEST_CASE_TYPE_NAME = "Automated";
-    private final int HTTP_TIMEOUT = 10000;
     private boolean isTestCaseTypeSupported = false;
     private HttpClient client;
     private RequestConfig requestConfig;
@@ -48,7 +49,7 @@ public class CodebeamerApiClient {
     private ObjectMapper objectMapper;
     private BuildListener listener;
 
-    public CodebeamerApiClient(PluginConfiguration pluginConfiguration, BuildListener listener) {
+    public CodebeamerApiClient(PluginConfiguration pluginConfiguration, BuildListener listener, int timeout) {
         this.pluginConfiguration = pluginConfiguration;
         this.baseUrl = pluginConfiguration.getUri();
         this.listener = listener;
@@ -56,9 +57,9 @@ public class CodebeamerApiClient {
         objectMapper = new ObjectMapper();
         CredentialsProvider provider = getCredentialsProvider(pluginConfiguration.getUsername(), pluginConfiguration.getPassword());
         client = HttpClientBuilder.create().setDefaultCredentialsProvider(provider).build();
-        requestConfig = RequestConfig.custom().setConnectionRequestTimeout(HTTP_TIMEOUT)
-                                                .setConnectTimeout(HTTP_TIMEOUT)
-                                                .setSocketTimeout(HTTP_TIMEOUT)
+        requestConfig = RequestConfig.custom().setConnectionRequestTimeout(timeout)
+                                                .setConnectTimeout(timeout)
+                                                .setSocketTimeout(timeout)
                                                 .build();
     }
 
