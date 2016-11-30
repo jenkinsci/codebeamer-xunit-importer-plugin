@@ -39,7 +39,7 @@ import java.util.*;
 public class CodebeamerApiClient {
     public static final int HTTP_TIMEOUT_LONG = 30000;
     public static final int HTTP_TIMEOUT_SHORT = 10000;
-    private final String DEFAULT_TESTSET_NAME = "Jenkins-TestSet";
+    private final String DEFAULT_TESTSET_NAME = "Jenkins-xUnit";
     private final String TEST_CASE_TYPE_NAME = "Automated";
     private boolean isTestCaseTypeSupported = false;
     private HttpClient client;
@@ -239,7 +239,7 @@ public class CodebeamerApiClient {
     }
 
     private String getBuildIdentifier(AbstractBuild<?, ?> build) {
-        return build.getProject().getName() + "#" + build.getNumber();
+        return build.getProject().getName() + " #" + build.getNumber();
     }
 
     private Integer findOrCreateTrackerItemInTree(String fullName, Integer trackerId, NodeMapping nodeMapping, Integer folder, Integer limit, String status) throws IOException {
