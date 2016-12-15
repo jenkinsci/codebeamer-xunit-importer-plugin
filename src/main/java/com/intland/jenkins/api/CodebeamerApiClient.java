@@ -221,12 +221,16 @@ public class CodebeamerApiClient {
     private Integer findOrCreateTrackerItem(Integer trackerId, String name, String description) throws IOException {
         String urlParamName = XUnitUtil.encodeParam(name);
         String content = get(String.format(baseUrl + "/rest/tracker/%s/items/or/name=%s/page/1", trackerId, urlParamName));
-        PagedTrackerItemsDto pagedTrackerItemsDto = objectMapper.readValue(content, PagedTrackerItemsDto.class);
 
-        Integer result;
-        if (pagedTrackerItemsDto.getTotal() > 0) {
-            result = pagedTrackerItemsDto.getItems()[0].getId();
-        } else {
+        Integer result = null;
+        if (content != null) {
+            PagedTrackerItemsDto pagedTrackerItemsDto = objectMapper.readValue(content, PagedTrackerItemsDto.class);
+            if (pagedTrackerItemsDto.getTotal() > 0) {
+                result = pagedTrackerItemsDto.getItems()[0].getId();
+            }
+        }
+
+        if (result == null) {
             TestRunDto testConfig = new TestRunDto();
             testConfig.setName(name);
             testConfig.setTracker("/tracker/" + trackerId);
@@ -386,7 +390,7 @@ public class CodebeamerApiClient {
         } else {
             InputStream responseStream = response.getEntity().getContent();
             String error = XUnitUtil.getStringFromInputStream(responseStream);
-            XUnitUtil.log(listener, "ERROR: " + error);
+            XUnitUtil.log(listener, "ERROR: " + error + ", content: " + content);
             post.releaseConnection();
             throw new IOException("post returned with status code: " + statusCode);
         }
@@ -401,10 +405,20 @@ public class CodebeamerApiClient {
         put.setEntity(stringEntity);
 
         HttpResponse response = client.execute(put);
-        String json  = new BasicResponseHandler().handleResponse(response);
-        put.releaseConnection();
+        int statusCode = response.getStatusLine().getStatusCode();
+        TrackerItemDto result = null;
 
-        return objectMapper.readValue(json, TrackerItemDto.class);
+        if (statusCode == 200) {
+            String json  = new BasicResponseHandler().handleResponse(response);
+            result = objectMapper.readValue(json, TrackerItemDto.class);
+        } else if (listener != null) { //listener is null when job is edited
+            InputStream responseStream = response.getEntity().getContent();
+            String warn = XUnitUtil.getStringFromInputStream(responseStream);
+            XUnitUtil.log(listener, "WARNING (PUT): " + warn + ", statusCode: " + statusCode + ", content: " + content);
+        }
+
+        put.releaseConnection();
+        return result;
     }
 
     private String get(String url) throws IOException {
@@ -412,14 +426,17 @@ public class CodebeamerApiClient {
         get.setConfig(requestConfig);
         HttpResponse response = client.execute(get);
         int statusCode = response.getStatusLine().getStatusCode();
-
         String result = null;
+
         if (statusCode == 200) {
             result = new BasicResponseHandler().handleResponse(response);
+        } else if (listener != null) { //listener is null when job is edited
+            InputStream responseStream = response.getEntity().getContent();
+            String warn = XUnitUtil.getStringFromInputStream(responseStream);
+            XUnitUtil.log(listener, "WARNING (GET): " + warn + ", statusCode: " + statusCode + ", url: " + url);
         }
 
         get.releaseConnection();
-
         return result;
     }
 
