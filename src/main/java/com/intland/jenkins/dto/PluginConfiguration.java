@@ -18,6 +18,8 @@ public class PluginConfiguration {
     private Integer requirementParentId;
     private Integer bugTrackerId;
     private Integer numberOfBugsToReport;
+    private Integer releaseId;
+    private String build;
     private String[] includedPackages;
     private String[] excludedPackages;
     private String[] truncatePackageTree;
@@ -157,5 +159,21 @@ public class PluginConfiguration {
 
     public void setNumberOfBugsToReport(Integer numberOfBugsToReport) {
         this.numberOfBugsToReport = numberOfBugsToReport;
+    }
+
+    public Integer getReleaseId() {
+        return releaseId;
+    }
+
+    public void setReleaseId(Integer releaseId) {
+        this.releaseId = releaseId;
+    }
+
+    public String getBuild() {
+        return build;
+    }
+
+    public void setBuild(String build) {
+        this.build = build;
     }
 }

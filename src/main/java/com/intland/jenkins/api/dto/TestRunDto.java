@@ -17,10 +17,12 @@ public class TestRunDto {
     private String description;
     private String descFormat;
     private String type;
+    private String build;
     private ReferenceDto submitter;
     private ReferenceDto parent;
     private ReferenceDto testConfiguration;
     private ReferenceDto testSet;
+    private ReferenceDto release;
     private List<Object[]>  testCases;
 
     public TestRunDto(){}
@@ -89,7 +91,7 @@ public class TestRunDto {
     }
 
     public void setTestSet(Integer testSetId) {
-        this.testSet = new ReferenceDto("/item/" + testSetId);;
+        this.testSet = new ReferenceDto("/item/" + testSetId);
     }
 
     public String getTracker() {
@@ -122,5 +124,21 @@ public class TestRunDto {
 
     public void setType(String type) {
         this.type = type;
+    }
+
+    public void setBuild(String build) {
+        this.build = build;
+    }
+
+    public String getBuild() {
+        return build;
+    }
+
+    public void setRelease(Integer releaseId) {
+        this.release = new ReferenceDto("/item/" + releaseId);
+    }
+
+    public ReferenceDto getRelease() {
+        return release;
     }
 }

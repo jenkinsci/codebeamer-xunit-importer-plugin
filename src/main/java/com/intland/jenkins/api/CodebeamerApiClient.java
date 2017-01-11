@@ -14,13 +14,11 @@ import com.intland.jenkins.dto.TestResults;
 import com.intland.jenkins.markup.*;
 import hudson.model.AbstractBuild;
 import hudson.model.BuildListener;
-import hudson.util.IOUtils;
 import org.apache.http.HttpResponse;
 import org.apache.http.auth.AuthScope;
 import org.apache.http.auth.UsernamePasswordCredentials;
 import org.apache.http.client.CredentialsProvider;
 import org.apache.http.client.HttpClient;
-import org.apache.http.client.HttpResponseException;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
@@ -30,17 +28,18 @@ import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.apache.http.impl.client.BasicResponseHandler;
 import org.apache.http.impl.client.HttpClientBuilder;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.StringWriter;
 import java.util.*;
 
 public class CodebeamerApiClient {
-    public static final int HTTP_TIMEOUT_LONG = 30000;
+    public static final int HTTP_TIMEOUT_LONG = 45000;
     public static final int HTTP_TIMEOUT_SHORT = 10000;
+    public static final int UPLOAD_BATCH_SIZE = 20;
     private final String DEFAULT_TESTSET_NAME = "Jenkins-xUnit";
     private final String TEST_CASE_TYPE_NAME = "Automated";
+    private final String COMPLETED_STATUS = "Completed";
+    private final String MIN_VERSION_BATCH_UPDATE = "8.1.0";
     private boolean isTestCaseTypeSupported = false;
     private HttpClient client;
     private RequestConfig requestConfig;
@@ -66,6 +65,14 @@ public class CodebeamerApiClient {
     public void postTestRuns(TestResults tests, AbstractBuild<?, ?> build) throws IOException {
         String buildIdentifier = getBuildIdentifier(build);
         XUnitUtil.log(listener, "Starting xUnit tests upload");
+
+        XUnitUtil.log(listener, "Checking codeBeamer version");
+        String version = getCodebeamerVersion();
+        boolean isBatchUploadSupported = XUnitUtil.versionCompare(version, MIN_VERSION_BATCH_UPDATE) >= 0;
+        int uploadBatchSize = isBatchUploadSupported ? UPLOAD_BATCH_SIZE : 1;
+        XUnitUtil.log(listener, String.format("codeBeamer version: %s, batch upload supported: %s, upload size: %s", version,
+                isBatchUploadSupported, uploadBatchSize));
+
         XUnitUtil.log(listener, "Checking supported Test Case types");
         isTestCaseTypeSupported = isTestCaseTypeSupported();
         XUnitUtil.log(listener, String.format("Test Case type: %s, supported: %s", TEST_CASE_TYPE_NAME, isTestCaseTypeSupported));
@@ -105,26 +112,52 @@ public class CodebeamerApiClient {
 
         int uploadCounter = 0;
         int numberOfReportedBugs = 0;
-        for (TestResultItem test : tests.getTestResultItems()) {
-            Integer testCaseId = testCasesForCurrentTestRun.get(test.getFullName());
-            TrackerItemDto createdRun = createTestRun(pluginConfiguration.getTestConfigurationId(), testSetId, parentItem, test, testCaseId);
-            XUnitUtil.log(listener, String.format("TestRun created with name: %s and id: %s ", createdRun.getName(), createdRun.getId()));
-            updateTestRunStatusAndSpentTime(createdRun.getId(), "Completed", (long)(test.getDuration() * 1000));
+        List<TestResultItem> testsToUpload = tests.getTestResultItems();
+        int toUploadSize = testsToUpload.size();
+        while (uploadCounter < testsToUpload.size()) {
+            int toIndex = uploadCounter + uploadBatchSize < toUploadSize ? uploadCounter + uploadBatchSize : toUploadSize;
+            List<TestResultItem> testBatch = testsToUpload.subList(uploadCounter, toIndex);
 
-            if (isReportingBugNeeded(test, numberOfReportedBugs)) {
-                createBug(test, createdRun);
-                numberOfReportedBugs++;
+            List<TestRunDto> testRuns = new ArrayList<>(testBatch.size());
+            for (TestResultItem test : testBatch) {
+                Integer testCaseId = testCasesForCurrentTestRun.get(test.getFullName());
+                testRuns.add(createTestRunObject(pluginConfiguration.getTestConfigurationId(), testSetId, parentItem, test, testCaseId));
             }
 
-            uploadCounter++;
+            TrackerItemDto[] createdRuns = postTrackerItems(testRuns);
+            List<TestCaseDto> testCaseDtos = new ArrayList<>(createdRuns.length);
+
+            for (int i = 0; i < createdRuns.length; i++) {
+                XUnitUtil.log(listener, String.format("TestRun created with name: %s and id: %s ", createdRuns[i].getName(), createdRuns[i].getId()));
+
+                long duration = (long) (testBatch.get(i).getDuration() * 1000);
+                TrackerItemDto createdRun = createdRuns[i];
+                TestCaseDto testCaseDto = new TestCaseDto(createdRun.getId(), COMPLETED_STATUS);
+                testCaseDto.setSpentMillis(duration);
+                testCaseDtos.add(testCaseDto);
+
+                if (isReportingBugNeeded(testBatch.get(i), numberOfReportedBugs)) {
+                    createBug(testBatch.get(i), createdRun);
+                    numberOfReportedBugs++;
+                }
+            }
+
+            updateTrackerItems(testCaseDtos);
+
+            uploadCounter += createdRuns.length;
             if (uploadCounter % 100 == 0) {
                 XUnitUtil.log(listener, "uploaded: " + uploadCounter + " test runs");
             }
         }
 
         updateTestSetTestCases(testSetId, testCasesForCurrentTestRun.values());
-        updateTrackerItemStatus(testSetId, "Completed");
+        updateTrackerItemStatus(testSetId, COMPLETED_STATUS);
         XUnitUtil.log(listener, "Upload finished, uploaded: " + uploadCounter + " test runs");
+    }
+
+    private String getCodebeamerVersion() throws IOException {
+        String url = String.format("%s/rest/version", baseUrl);
+        return get(url).replace("\"", "");
     }
 
     private boolean isTestCaseTypeSupported() throws IOException {
@@ -173,7 +206,7 @@ public class CodebeamerApiClient {
         return "Bug of " + test.getName();
     }
 
-    private TrackerItemDto createTestRun(Integer testConfigurationId, Integer testSetId, TrackerItemDto parentItem, TestResultItem test, Integer testCaseId) throws IOException {
+    private TestRunDto createTestRunObject(Integer testConfigurationId, Integer testSetId, TrackerItemDto parentItem, TestResultItem test, Integer testCaseId) throws IOException {
         TestRunDto testRunDto = new TestRunDto(test.getName(), parentItem.getId(), pluginConfiguration.getTestRunTrackerId(),
                 Arrays.asList(new Integer[]{testCaseId}), testConfigurationId, test.getResult());
         if (test.getErrorDetail() != null) {
@@ -182,8 +215,15 @@ public class CodebeamerApiClient {
         } else {
             testRunDto.setDescription("--");
         }
+
         testRunDto.setTestSet(testSetId);
-        return postTrackerItem(testRunDto);
+        Integer releaseId = pluginConfiguration.getReleaseId();
+        if (releaseId != null) {
+            testRunDto.setRelease(releaseId);
+        }
+
+        testRunDto.setBuild(pluginConfiguration.getBuild());
+        return testRunDto;
     }
 
     private String createParentMarkup(AbstractBuild<?, ?> build) throws IOException {
@@ -288,13 +328,28 @@ public class CodebeamerApiClient {
             testCaseDto.setType(TEST_CASE_TYPE_NAME);
         }
 
-        String content = objectMapper.writeValueAsString(testCaseDto);
-        return post(content).getId();
+        return postTrackerItem(testCaseDto).getId();
     }
 
+    public TrackerItemDto[] postTrackerItems(List<TestRunDto> testRunDtos) throws IOException {
+        TrackerItemDto[] result;
+        boolean multiple = testRunDtos.size() > 1;
+        if (multiple) {
+            String content = objectMapper.writeValueAsString(testRunDtos);
+            String response = post(content, multiple);
+            result = objectMapper.readValue(response, TrackerItemDto[].class);
+        } else {
+            TrackerItemDto response = postTrackerItem(testRunDtos.get(0));
+            result = new TrackerItemDto[] {response};
+        }
+        return result;
+    }
+
+    // Single item post, compatible with codeBeamer <8.1.0
     public TrackerItemDto postTrackerItem(TestRunDto testRunDto) throws IOException {
         String content = objectMapper.writeValueAsString(testRunDto);
-        return post(content);
+        String response = post(content);
+        return objectMapper.readValue(response, TrackerItemDto.class);
     }
 
     public TrackerItemDto[] getTrackerItems(Integer trackerId) throws IOException {
@@ -347,6 +402,11 @@ public class CodebeamerApiClient {
         return put(content);
     }
 
+    private TrackerItemDto updateTrackerItems(List<TestCaseDto> testCaseDtos) throws IOException {
+        String content = objectMapper.writeValueAsString(testCaseDtos);
+        return put(content);
+    }
+
     public TrackerItemDto getTrackerItem(Integer itemId) throws IOException {
         String value = get(baseUrl + "/rest/item/" + itemId);
         return value != null ? objectMapper.readValue(value, TrackerItemDto.class) : null;
@@ -373,8 +433,13 @@ public class CodebeamerApiClient {
         return result;
     }
 
-    private TrackerItemDto post(String content) throws IOException {
-        HttpPost post = new HttpPost(String.format("%s/rest/item", baseUrl));
+    private String post(String content) throws IOException {
+        return post(content, false);
+    }
+
+    private String post(String content, boolean multiple) throws IOException {
+        String endpoint = multiple ? "items" : "item";
+        HttpPost post = new HttpPost(String.format("%s/rest/%s", baseUrl, endpoint));
         post.setConfig(requestConfig);
 
         StringEntity stringEntity = new StringEntity(content, "UTF-8");
@@ -386,7 +451,7 @@ public class CodebeamerApiClient {
         if (statusCode == 201) {
             String json = new BasicResponseHandler().handleResponse(response);
             post.releaseConnection();
-            return objectMapper.readValue(json, TrackerItemDto.class);
+            return json;
         } else {
             InputStream responseStream = response.getEntity().getContent();
             String error = XUnitUtil.getStringFromInputStream(responseStream);

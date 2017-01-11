@@ -38,6 +38,8 @@ public class XUnitImporter extends Notifier {
     private Integer requirementParentId;
     private Integer bugTrackerId;
     private Integer numberOfBugsToReport;
+    private Integer releaseId;
+    private String build;
     private String includedPackages;
     private String excludedPackages;
     private String truncatePackageTree;
@@ -45,7 +47,8 @@ public class XUnitImporter extends Notifier {
     @DataBoundConstructor
     public XUnitImporter(String uri, String username, String password, Integer testSetTrackerId, Integer testCaseTrackerId, Integer testCaseParentId,
                          Integer testRunTrackerId, Integer testConfigurationId, Integer requirementTrackerId, Integer requirementDepth,
-                         Integer requirementParentId, Integer bugTrackerId, Integer numberOfBugsToReport, String includedPackages, String excludedPackages, String truncatePackageTree) {
+                         Integer requirementParentId, Integer bugTrackerId, Integer numberOfBugsToReport, Integer releaseId, String build,
+                         String includedPackages, String excludedPackages, String truncatePackageTree) {
         this.uri = uri;
         this.username = username;
         this.password = password;
@@ -59,6 +62,8 @@ public class XUnitImporter extends Notifier {
         this.requirementParentId = requirementParentId;
         this.bugTrackerId = bugTrackerId;
         this.numberOfBugsToReport = numberOfBugsToReport;
+        this.releaseId = releaseId;
+        this.build = build;
         this.includedPackages = includedPackages;
         this.excludedPackages = excludedPackages;
         this.truncatePackageTree = truncatePackageTree;
@@ -162,6 +167,14 @@ public class XUnitImporter extends Notifier {
         return requirementTrackerId;
     }
 
+    public Integer getReleaseId() {
+        return releaseId;
+    }
+
+    public String getBuild() {
+        return build;
+    }
+
     @Override
     public BuildStepMonitor getRequiredMonitorService() {
         return BuildStepMonitor.NONE;
@@ -182,6 +195,8 @@ public class XUnitImporter extends Notifier {
         pluginConfiguration.setRequirementParentId(requirementParentId);
         pluginConfiguration.setBugTrackerId(bugTrackerId);
         pluginConfiguration.setNumberOfBugsToReport(numberOfBugsToReport == null ? 10 : numberOfBugsToReport);
+        pluginConfiguration.setReleaseId(releaseId);
+        pluginConfiguration.setBuild(build);
         pluginConfiguration.setIncludedPackages(includedPackages == null || includedPackages.trim().equals("") ? new String[]{} : includedPackages.split(";"));
         pluginConfiguration.setExcludedPackages(excludedPackages == null || excludedPackages.trim().equals("") ? new String[]{} : excludedPackages.split(";"));
         pluginConfiguration.setTruncatePackageTree(truncatePackageTree == null || truncatePackageTree.trim().equals("") ? new String[]{} : truncatePackageTree.split(";"));
@@ -207,46 +222,50 @@ public class XUnitImporter extends Notifier {
         }
 
         public FormValidation doCheckTestSetTrackerId(@QueryParameter Integer value, @QueryParameter String uri,  @QueryParameter String username, @QueryParameter String password) throws IOException {
-            return validateTrackerType(value, 108, new PluginConfiguration(uri, username, password), true);
+            return validateTrackerType(value, new PluginConfiguration(uri, username, password), true, 108);
         }
 
         public FormValidation doCheckTestCaseTrackerId(@QueryParameter Integer value, @QueryParameter String uri,  @QueryParameter String username, @QueryParameter String password, @QueryParameter Integer testCaseParentId) throws IOException {
             if (testCaseParentId == null) {
-                return validateTrackerType(value, 102, new PluginConfiguration(uri, username, password), true);
+                return validateTrackerType(value, new PluginConfiguration(uri, username, password), true, 102);
             } else {
                 return FormValidation.ok();
             }
         }
 
+        public FormValidation doCheckReleaseId(@QueryParameter Integer value, @QueryParameter String uri,  @QueryParameter String username, @QueryParameter String password) throws IOException {
+            return validateTrackerItemWithTracker(value, new PluginConfiguration(uri, username, password), false, 103);
+        }
+
         public FormValidation doCheckTestCaseParentId(@QueryParameter Integer value, @QueryParameter String uri,  @QueryParameter String username, @QueryParameter String password) throws IOException {
-            return validateTrackerItemWithTracker(value, new PluginConfiguration(uri, username, password), 102, false);
+            return validateTrackerItemWithTracker(value, new PluginConfiguration(uri, username, password), false, 102);
         }
 
         public FormValidation doCheckRequirementTrackerId(@QueryParameter Integer value, @QueryParameter String uri,  @QueryParameter String username, @QueryParameter String password, @QueryParameter Integer requirementParentId) throws IOException {
             if (requirementParentId == null) {
-                return validateTrackerType(value, 5, new PluginConfiguration(uri, username, password), false);
+                return validateTrackerType(value, new PluginConfiguration(uri, username, password), false, 5, 10);
             } else {
                 return FormValidation.ok();
             }
         }
 
         public FormValidation doCheckRequirementParentId(@QueryParameter Integer value, @QueryParameter String uri,  @QueryParameter String username, @QueryParameter String password) throws IOException {
-            return validateTrackerItemWithTracker(value, new PluginConfiguration(uri, username, password), 5, false);
+            return validateTrackerItemWithTracker(value, new PluginConfiguration(uri, username, password), false, 5, 10);
         }
 
         public FormValidation doCheckTestRunTrackerId(@QueryParameter Integer value, @QueryParameter String uri,  @QueryParameter String username, @QueryParameter String password) throws IOException {
-            return validateTrackerType(value, 9, new PluginConfiguration(uri, username, password), true);
+            return validateTrackerType(value, new PluginConfiguration(uri, username, password), true, 9);
         }
 
         public FormValidation doCheckTestConfigurationId(@QueryParameter Integer value, @QueryParameter String uri,  @QueryParameter String username, @QueryParameter String password) throws IOException {
-            return validateTrackerItemWithTracker(value, new PluginConfiguration(uri, username, password), 109, true);
+            return validateTrackerItemWithTracker(value, new PluginConfiguration(uri, username, password), true, 109);
         }
 
         public FormValidation doCheckBugTrackerId(@QueryParameter Integer value, @QueryParameter String uri,  @QueryParameter String username, @QueryParameter String password) throws IOException {
-            return validateTrackerType(value, 2, new PluginConfiguration(uri, username, password), false);
+            return validateTrackerType(value, new PluginConfiguration(uri, username, password), false, 2);
         }
 
-        private FormValidation validateTrackerItemWithTracker(Integer value, PluginConfiguration pluginConfiguration, int validTrackerTypeId, boolean required) {
+        private FormValidation validateTrackerItemWithTracker(Integer value, PluginConfiguration pluginConfiguration, boolean required, Integer... validTrackerTypeIds) {
             FormValidation result = FormValidation.ok();
             if (value != null) {
                 try {
@@ -254,7 +273,7 @@ public class XUnitImporter extends Notifier {
                     TrackerItemDto trackerItem = apiClient.getTrackerItem(value);
                     if (trackerItem != null) {
                         Integer trackerId = trackerItem.getTracker().getId();
-                        result = validateTrackerType(trackerId, validTrackerTypeId, pluginConfiguration, false);
+                        result = validateTrackerType(trackerId, pluginConfiguration, false, validTrackerTypeIds);
                     } else {
                         result = FormValidation.error("Tracker Item can not be found");
                     }
@@ -267,12 +286,12 @@ public class XUnitImporter extends Notifier {
             return result;
         }
 
-        private FormValidation validateTrackerType(Integer value, int validTrackerTypeId, PluginConfiguration pluginConfiguration, boolean required) {
+        private FormValidation validateTrackerType(Integer value, PluginConfiguration pluginConfiguration, boolean required, Integer... validTrackerTypeIds) {
             FormValidation result = FormValidation.ok();
 
             if (value != null) {
                 try {
-                    boolean valid = checkTrackerType(pluginConfiguration, value, validTrackerTypeId);
+                    boolean valid = checkTrackerType(pluginConfiguration, value, validTrackerTypeIds);
                     if (valid) {
                         result = FormValidation.ok();
                     } else {
@@ -288,17 +307,24 @@ public class XUnitImporter extends Notifier {
             return result;
         }
 
-        private boolean checkTrackerType(PluginConfiguration pluginConfiguration, Integer trackerId, int validTrackerTypeId) throws IOException {
+        private boolean checkTrackerType(PluginConfiguration pluginConfiguration, Integer trackerId, Integer... validTrackerTypeIds) throws IOException {
             CodebeamerApiClient apiClient = new CodebeamerApiClient(pluginConfiguration, null, CodebeamerApiClient.HTTP_TIMEOUT_SHORT);
             TrackerDto trackerDto = apiClient.getTrackerType(trackerId);
-            boolean result = false;
 
             if (trackerDto != null) {
                 Integer typeId = trackerDto.getType().getTypeId();
-                result = typeId != null && typeId.intValue() ==  validTrackerTypeId;
+                if (typeId == null) {
+                    return false;
+                }
+
+                for (Integer validTrackerTypeId : validTrackerTypeIds) {
+                    if (typeId.intValue() == validTrackerTypeId.intValue()) {
+                        return true;
+                    }
+                }
             }
 
-            return result;
+            return false;
         }
     }
 }

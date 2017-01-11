@@ -30,13 +30,19 @@
     <f:entry title="Number of Bugs to report (optional)" field="numberOfBugsToReport" help="/plugin/codebeamer-xunit-importer/help/help-numberOfBugsToReport.html">
       <f:textbox default="10" />
     </f:entry>
-    <f:entry title="Requirement Tracker ID (optional)" field="requirementTrackerId" help="/plugin/codebeamer-xunit-importer/help/help-requirementTrackerId.html">
+    <f:entry title="Requirement or User Story Tracker ID (optional)" field="requirementTrackerId" help="/plugin/codebeamer-xunit-importer/help/help-requirementTrackerId.html">
       <f:textbox />
     </f:entry>
-    <f:entry title="Requirement Top Node ID (optional)" field="requirementParentId" help="/plugin/codebeamer-xunit-importer/help/help-requirementParentId.html">
+    <f:entry title="Requirement or User Story Top Node ID (optional)" field="requirementParentId" help="/plugin/codebeamer-xunit-importer/help/help-requirementParentId.html">
       <f:textbox />
     </f:entry>
     <f:entry title="Requirement Depth (optional)" field="requirementDepth" help="/plugin/codebeamer-xunit-importer/help/help-requirementDepth.html">
+      <f:textbox />
+    </f:entry>
+    <f:entry title="Release ID (optional)" field="releaseId">
+      <f:textbox />
+    </f:entry>
+    <f:entry title="Build (optional)" field="build">
       <f:textbox />
     </f:entry>
     <f:entry title="Include Packages (optional)" field="includedPackages" help="/plugin/codebeamer-xunit-importer/help/help-includedPackages.html">
