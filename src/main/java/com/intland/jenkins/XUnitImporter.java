@@ -3,6 +3,7 @@
  */
 package com.intland.jenkins;
 import com.intland.jenkins.api.CodebeamerApiClient;
+import com.intland.jenkins.api.RestAdapter;
 import com.intland.jenkins.api.dto.TrackerDto;
 import com.intland.jenkins.api.dto.TrackerItemDto;
 import com.intland.jenkins.dto.PluginConfiguration;
@@ -72,7 +73,9 @@ public class XUnitImporter extends Notifier {
     @Override
     public boolean perform(AbstractBuild<?, ?> build, Launcher launcher, BuildListener listener) throws IOException {
         PluginConfiguration pluginConfiguration = getPluginConfiguration();
-        CodebeamerApiClient apiClient = new CodebeamerApiClient(pluginConfiguration, listener, CodebeamerApiClient.HTTP_TIMEOUT_LONG);
+
+        RestAdapter restAdapter = new RestAdapter(pluginConfiguration, CodebeamerApiClient.HTTP_TIMEOUT_LONG, listener);
+        CodebeamerApiClient apiClient = new CodebeamerApiClient(pluginConfiguration, listener, CodebeamerApiClient.HTTP_TIMEOUT_LONG, restAdapter);
 
         if (testCaseParentId != null ) {
             TrackerItemDto trackerItemDto = apiClient.getTrackerItem(testCaseParentId);
@@ -269,7 +272,8 @@ public class XUnitImporter extends Notifier {
             FormValidation result = FormValidation.ok();
             if (value != null) {
                 try {
-                    CodebeamerApiClient apiClient = new CodebeamerApiClient(pluginConfiguration, null, CodebeamerApiClient.HTTP_TIMEOUT_SHORT);
+                    RestAdapter restAdapter = new RestAdapter(pluginConfiguration, CodebeamerApiClient.HTTP_TIMEOUT_SHORT, null);
+                    CodebeamerApiClient apiClient = new CodebeamerApiClient(pluginConfiguration, null, CodebeamerApiClient.HTTP_TIMEOUT_SHORT, restAdapter);
                     TrackerItemDto trackerItem = apiClient.getTrackerItem(value);
                     if (trackerItem != null) {
                         Integer trackerId = trackerItem.getTracker().getId();
@@ -308,7 +312,8 @@ public class XUnitImporter extends Notifier {
         }
 
         private boolean checkTrackerType(PluginConfiguration pluginConfiguration, Integer trackerId, Integer... validTrackerTypeIds) throws IOException {
-            CodebeamerApiClient apiClient = new CodebeamerApiClient(pluginConfiguration, null, CodebeamerApiClient.HTTP_TIMEOUT_SHORT);
+            RestAdapter restAdapter = new RestAdapter(pluginConfiguration, CodebeamerApiClient.HTTP_TIMEOUT_SHORT, null);
+            CodebeamerApiClient apiClient = new CodebeamerApiClient(pluginConfiguration, null, CodebeamerApiClient.HTTP_TIMEOUT_SHORT, restAdapter);
             TrackerDto trackerDto = apiClient.getTrackerType(trackerId);
 
             if (trackerDto != null) {

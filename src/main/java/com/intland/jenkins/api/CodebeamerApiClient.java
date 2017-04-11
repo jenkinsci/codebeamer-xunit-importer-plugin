@@ -14,23 +14,11 @@ import com.intland.jenkins.dto.TestResults;
 import com.intland.jenkins.markup.*;
 import hudson.model.AbstractBuild;
 import hudson.model.BuildListener;
-import org.apache.http.HttpResponse;
-import org.apache.http.auth.AuthScope;
-import org.apache.http.auth.UsernamePasswordCredentials;
-import org.apache.http.client.CredentialsProvider;
-import org.apache.http.client.HttpClient;
-import org.apache.http.client.config.RequestConfig;
-import org.apache.http.client.methods.HttpGet;
-import org.apache.http.client.methods.HttpPost;
-import org.apache.http.client.methods.HttpPut;
-import org.apache.http.entity.StringEntity;
-import org.apache.http.impl.client.BasicCredentialsProvider;
-import org.apache.http.impl.client.BasicResponseHandler;
-import org.apache.http.impl.client.HttpClientBuilder;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.util.*;
+
+import static com.intland.jenkins.api.RestAdapter.PAGESIZE;
 
 public class CodebeamerApiClient {
     public static final int HTTP_TIMEOUT_LONG = 45000;
@@ -41,25 +29,18 @@ public class CodebeamerApiClient {
     private final String COMPLETED_STATUS = "Completed";
     private final String MIN_VERSION_BATCH_UPDATE = "8.1.0";
     private boolean isTestCaseTypeSupported = false;
-    private HttpClient client;
-    private RequestConfig requestConfig;
     private PluginConfiguration pluginConfiguration;
-    private String baseUrl;
     private ObjectMapper objectMapper;
     private BuildListener listener;
 
-    public CodebeamerApiClient(PluginConfiguration pluginConfiguration, BuildListener listener, int timeout) {
+    private RestAdapter rest;
+
+    public CodebeamerApiClient(PluginConfiguration pluginConfiguration, BuildListener listener, int timeout, RestAdapter rest) {
         this.pluginConfiguration = pluginConfiguration;
-        this.baseUrl = pluginConfiguration.getUri();
         this.listener = listener;
 
         objectMapper = new ObjectMapper();
-        CredentialsProvider provider = getCredentialsProvider(pluginConfiguration.getUsername(), pluginConfiguration.getPassword());
-        client = HttpClientBuilder.create().setDefaultCredentialsProvider(provider).build();
-        requestConfig = RequestConfig.custom().setConnectionRequestTimeout(timeout)
-                                                .setConnectTimeout(timeout)
-                                                .setSocketTimeout(timeout)
-                                                .build();
+        this.rest = rest;
     }
 
     public void postTestRuns(TestResults tests, AbstractBuild<?, ?> build) throws IOException {
@@ -124,7 +105,7 @@ public class CodebeamerApiClient {
                 testRuns.add(createTestRunObject(pluginConfiguration.getTestConfigurationId(), testSetId, parentItem, test, testCaseId));
             }
 
-            TrackerItemDto[] createdRuns = postTrackerItems(testRuns);
+            TrackerItemDto[] createdRuns = rest.postTrackerItems(testRuns);
             List<TestCaseDto> testCaseDtos = new ArrayList<>(createdRuns.length);
 
             for (int i = 0; i < createdRuns.length; i++) {
@@ -156,14 +137,11 @@ public class CodebeamerApiClient {
     }
 
     private String getCodebeamerVersion() throws IOException {
-        String url = String.format("%s/rest/version", baseUrl);
-        return get(url).replace("\"", "");
+        return rest.getVersion();
     }
 
     private boolean isTestCaseTypeSupported() throws IOException {
-        String url = String.format("%s/rest/tracker/%s/schema", baseUrl, pluginConfiguration.getTestCaseTrackerId());
-        String json = get(url);
-        TrackerSchemaDto trackerSchemaDto = objectMapper.readValue(json, TrackerSchemaDto.class);
+        TrackerSchemaDto trackerSchemaDto = rest.getTestCaseTrackerSchema();
         return trackerSchemaDto.doesTypeContain(TEST_CASE_TYPE_NAME);
     }
 
@@ -179,12 +157,7 @@ public class CodebeamerApiClient {
 
     private boolean isTrackerItemWithNameAndStatusExist(TestResultItem test) throws IOException {
         String name = generateNameOfBug(test);
-        String cbQl = XUnitUtil.encodeParam(String.format("tracker.id IN ('%s') AND workItemStatus IN ('Unset','InProgress') " +
-                "AND summary LIKE '%s'", pluginConfiguration.getBugTrackerId(), name));
-
-        String url = String.format("%s/rest/query/page/1?queryString=%s&pagesize=1", baseUrl, cbQl);
-        String content = get(url);
-        PagedTrackerItemsDto pagedTrackerItemsDto = objectMapper.readValue(content, PagedTrackerItemsDto.class);
+        PagedTrackerItemsDto pagedTrackerItemsDto = rest.getPagedTrackerItemForName(name);
         boolean itemExists = pagedTrackerItemsDto.getTotal() > 0;
         if (itemExists) {
             XUnitUtil.log(listener, String.format("Unresolved bug with name: %s already exists, skipping Bug report creation", name));
@@ -199,7 +172,7 @@ public class CodebeamerApiClient {
         bug.setName(generateNameOfBug(test));
         bug.setDescription(String.format("{{{%s}}} \\\\ [ISSUE:%s]", test.getErrorDetail(), createdRun.getId()));
         bug.setDescFormat("Wiki");
-        return postTrackerItem(bug);
+        return rest.postTrackerItem(bug);
     }
 
     private String generateNameOfBug(TestResultItem test) {
@@ -242,13 +215,11 @@ public class CodebeamerApiClient {
 
     private TrackerItemDto createParentTestRun(TestResults tests, String buildIdentifier, AbstractBuild<?, ?> build, Integer testConfigurationId, Integer testSetId, Collection<Integer> testCaseIds) throws IOException {
         String newMarkupContent = createParentMarkup(build);
-        TrackerItemDto parentItem;
         TestRunDto parentRunDto = new TestRunDto(buildIdentifier, null, pluginConfiguration.getTestRunTrackerId(), testCaseIds, testConfigurationId, tests.getStatus());
         parentRunDto.setTestSet(testSetId);
         parentRunDto.setDescription(tests.getTestSummary().toWikiMarkup() + newMarkupContent);
         parentRunDto.setDescFormat("Wiki");
-        parentItem = postTrackerItem(parentRunDto);
-        return parentItem;
+        return rest.postTrackerItem(parentRunDto);
     }
 
     private void createRequirementInTree(Map<Integer, TrackerItemDto[]> verifiesMap, NodeMapping requirementsNodeMapping, TestResultItem test, Integer testCaseId) throws IOException {
@@ -259,27 +230,17 @@ public class CodebeamerApiClient {
     }
 
     private Integer findOrCreateTrackerItem(Integer trackerId, String name, String description) throws IOException {
-        String urlParamName = XUnitUtil.encodeParam(name);
-        String content = get(String.format(baseUrl + "/rest/tracker/%s/items/or/name=%s/page/1", trackerId, urlParamName));
-
-        Integer result = null;
-        if (content != null) {
-            PagedTrackerItemsDto pagedTrackerItemsDto = objectMapper.readValue(content, PagedTrackerItemsDto.class);
-            if (pagedTrackerItemsDto.getTotal() > 0) {
-                result = pagedTrackerItemsDto.getItems()[0].getId();
-            }
-        }
-
-        if (result == null) {
+        PagedTrackerItemsDto pagedTrackerItemsDto = rest.getPagedTrackerItemsForName(trackerId, name);
+        if (pagedTrackerItemsDto.getTotal() > 0) {
+            return pagedTrackerItemsDto.getItems()[0].getId();
+        } else {
+            // no entry found => create one
             TestRunDto testConfig = new TestRunDto();
             testConfig.setName(name);
-            testConfig.setTracker("/tracker/" + trackerId);
+            testConfig.setTracker(String.format("/tracker/%s", trackerId));
             testConfig.setDescription(description);
-            TrackerItemDto trackerItemDto = postTrackerItem(testConfig);
-            result = trackerItemDto.getId();
+            return rest.postTrackerItem(testConfig).getId();
         }
-
-        return result;
     }
 
     private String getBuildIdentifier(AbstractBuild<?, ?> build) {
@@ -328,41 +289,16 @@ public class CodebeamerApiClient {
             testCaseDto.setType(TEST_CASE_TYPE_NAME);
         }
 
-        return postTrackerItem(testCaseDto).getId();
-    }
-
-    public TrackerItemDto[] postTrackerItems(List<TestRunDto> testRunDtos) throws IOException {
-        TrackerItemDto[] result;
-        boolean multiple = testRunDtos.size() > 1;
-        if (multiple) {
-            String content = objectMapper.writeValueAsString(testRunDtos);
-            String response = post(content, multiple);
-            result = objectMapper.readValue(response, TrackerItemDto[].class);
-        } else {
-            TrackerItemDto response = postTrackerItem(testRunDtos.get(0));
-            result = new TrackerItemDto[] {response};
-        }
-        return result;
-    }
-
-    // Single item post, compatible with codeBeamer <8.1.0
-    public TrackerItemDto postTrackerItem(TestRunDto testRunDto) throws IOException {
-        String content = objectMapper.writeValueAsString(testRunDto);
-        String response = post(content);
-        return objectMapper.readValue(response, TrackerItemDto.class);
+        return rest.postTrackerItem(testCaseDto).getId();
     }
 
     public TrackerItemDto[] getTrackerItems(Integer trackerId) throws IOException {
-        String url = String.format("%s/rest/tracker/%s/items/page/1?pagesize=500", baseUrl, trackerId);
-        String json = get(url);
-        PagedTrackerItemsDto pagedTrackerItemsDto = objectMapper.readValue(json, PagedTrackerItemsDto.class);
+        PagedTrackerItemsDto pagedTrackerItemsDto = rest.getTrackerItems(trackerId, 1);
 
-        int numberOfRequests = (pagedTrackerItemsDto.getTotal() / 500) + 1;
+        final int totalPages = (pagedTrackerItemsDto.getTotal() / PAGESIZE) + 1;
         List<TrackerItemDto> items = new ArrayList(Arrays.asList(pagedTrackerItemsDto.getItems()));
-        for (int i = 2; i < numberOfRequests; i++) {
-            url = String.format("%s/rest/tracker/%s/items/page/%s?pagesize=500", baseUrl, trackerId, numberOfRequests);
-            json = get(url);
-            pagedTrackerItemsDto = objectMapper.readValue(json, PagedTrackerItemsDto.class);
+        for (int page = 2; page < totalPages; page++) {
+            pagedTrackerItemsDto = rest.getTrackerItems(trackerId, page);
             items.addAll(Arrays.asList(pagedTrackerItemsDto.getItems()));
         }
 
@@ -378,137 +314,44 @@ public class CodebeamerApiClient {
         TrackerItemDto trackerItemDto = new TrackerItemDto();
         trackerItemDto.setUri("/item/" + testSetId);
         trackerItemDto.setTestCases(testCasesList);
-        String content = objectMapper.writeValueAsString(trackerItemDto);
-        return put(content);
+        return rest.updateTrackerItem(trackerItemDto);
     }
 
     private TrackerItemDto updateTestCaseVerifies(Integer testCaseId, Integer requirementId) throws IOException {
         TrackerItemDto[] verifies = new TrackerItemDto[]{ new TrackerItemDto("/item/" + requirementId) };
         TrackerItemDto trackerItemDto = new TrackerItemDto("/item/" + testCaseId, verifies);
-        String content = objectMapper.writeValueAsString(trackerItemDto);
-        return put(content);
+        return rest.updateTrackerItem(trackerItemDto);
     }
 
     private TrackerItemDto updateTestRunStatusAndSpentTime(Integer id, String status, Long duration) throws IOException {
         TestCaseDto testCaseDto = new TestCaseDto(id, status);
         testCaseDto.setSpentMillis(duration);
-        String content = objectMapper.writeValueAsString(testCaseDto);
-        return put(content);
+        return rest.updateTestCaseItem(testCaseDto);
     }
 
     private TrackerItemDto updateTrackerItemStatus(Integer id, String status) throws IOException {
         TestCaseDto testCaseDto = new TestCaseDto(id, status);
-        String content = objectMapper.writeValueAsString(testCaseDto);
-        return put(content);
+        return rest.updateTestCaseItem(testCaseDto);
     }
 
     private TrackerItemDto updateTrackerItems(List<TestCaseDto> testCaseDtos) throws IOException {
-        String content = objectMapper.writeValueAsString(testCaseDtos);
-        return put(content);
+        return rest.updateTestCaseItems(testCaseDtos);
     }
 
     public TrackerItemDto getTrackerItem(Integer itemId) throws IOException {
-        String value = get(baseUrl + "/rest/item/" + itemId);
-        return value != null ? objectMapper.readValue(value, TrackerItemDto.class) : null;
+        return rest.getTrackerItem(itemId);
     }
 
     public TrackerDto getTrackerType(Integer trackerId) throws IOException {
-        String value = get(baseUrl + "/rest/tracker/" + trackerId);
-        return value != null ? objectMapper.readValue(value, TrackerDto.class) : null;
+        return rest.getTrackerType(trackerId);
     }
 
     public String getUserId(String author)  throws IOException {
-        String authorNoSpace = author.replaceAll(" ", "");
-        String tmpUrl = String.format("%s/rest/user/%s", baseUrl, authorNoSpace);
-
-        String httpResult = get(tmpUrl);
-        String result = null;
-
-        if (httpResult != null) { //20X success
-            UserDto userDto = objectMapper.readValue(httpResult, UserDto.class);
+        UserDto userDto = rest.getUserId(author);
+        if (userDto != null) {
             String uri = userDto.getUri();
-            result = uri.substring(uri.lastIndexOf("/") + 1);
+            return uri.substring(uri.lastIndexOf("/") + 1);
         }
-
-        return result;
-    }
-
-    private String post(String content) throws IOException {
-        return post(content, false);
-    }
-
-    private String post(String content, boolean multiple) throws IOException {
-        String endpoint = multiple ? "items" : "item";
-        HttpPost post = new HttpPost(String.format("%s/rest/%s", baseUrl, endpoint));
-        post.setConfig(requestConfig);
-
-        StringEntity stringEntity = new StringEntity(content, "UTF-8");
-        stringEntity.setContentType("application/json");
-        post.setEntity(stringEntity);
-
-        HttpResponse response = client.execute(post);
-        int statusCode = response.getStatusLine().getStatusCode();
-        if (statusCode == 201) {
-            String json = new BasicResponseHandler().handleResponse(response);
-            post.releaseConnection();
-            return json;
-        } else {
-            InputStream responseStream = response.getEntity().getContent();
-            String error = XUnitUtil.getStringFromInputStream(responseStream);
-            XUnitUtil.log(listener, "ERROR: " + error + ", content: " + content);
-            post.releaseConnection();
-            throw new IOException("post returned with status code: " + statusCode);
-        }
-    }
-
-    private TrackerItemDto put(String content) throws IOException {
-        HttpPut put = new HttpPut(String.format("%s/rest/item", baseUrl));
-        put.setConfig(requestConfig);
-
-        StringEntity stringEntity = new StringEntity(content, "UTF-8");
-        stringEntity.setContentType("application/json");
-        put.setEntity(stringEntity);
-
-        HttpResponse response = client.execute(put);
-        int statusCode = response.getStatusLine().getStatusCode();
-        TrackerItemDto result = null;
-
-        if (statusCode == 200) {
-            String json  = new BasicResponseHandler().handleResponse(response);
-            result = objectMapper.readValue(json, TrackerItemDto.class);
-        } else if (listener != null) { //listener is null when job is edited
-            InputStream responseStream = response.getEntity().getContent();
-            String warn = XUnitUtil.getStringFromInputStream(responseStream);
-            XUnitUtil.log(listener, "WARNING (PUT): " + warn + ", statusCode: " + statusCode + ", content: " + content);
-        }
-
-        put.releaseConnection();
-        return result;
-    }
-
-    private String get(String url) throws IOException {
-        HttpGet get = new HttpGet(url);
-        get.setConfig(requestConfig);
-        HttpResponse response = client.execute(get);
-        int statusCode = response.getStatusLine().getStatusCode();
-        String result = null;
-
-        if (statusCode == 200) {
-            result = new BasicResponseHandler().handleResponse(response);
-        } else if (listener != null) { //listener is null when job is edited
-            InputStream responseStream = response.getEntity().getContent();
-            String warn = XUnitUtil.getStringFromInputStream(responseStream);
-            XUnitUtil.log(listener, "WARNING (GET): " + warn + ", statusCode: " + statusCode + ", url: " + url);
-        }
-
-        get.releaseConnection();
-        return result;
-    }
-
-    private CredentialsProvider getCredentialsProvider(String username, String password) {
-        CredentialsProvider provider = new BasicCredentialsProvider();
-        UsernamePasswordCredentials credentials = new UsernamePasswordCredentials(username, password);
-        provider.setCredentials(AuthScope.ANY, credentials);
-        return provider;
+        return null;
     }
 }
