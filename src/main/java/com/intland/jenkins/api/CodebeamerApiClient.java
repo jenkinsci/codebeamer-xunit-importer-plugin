@@ -1,9 +1,11 @@
 /*
- * Copyright (c) 2016 Intland Software (support@intland.com)
+ * Copyright (c) 2017 Intland Software (support@intland.com)
+ *
+ * Additional information can be found here: https://codebeamer.com/cb/project/1025
+ * If you find any bugs please use the Tracker page to report them: https://codebeamer.com/cb/project/1025/tracker
  */
 package com.intland.jenkins.api;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.intland.jenkins.XUnitUtil;
 import com.intland.jenkins.api.dto.*;
 import com.intland.jenkins.api.dto.trackerschema.TrackerSchemaDto;
@@ -30,7 +32,6 @@ public class CodebeamerApiClient {
     private final String MIN_VERSION_BATCH_UPDATE = "8.1.0";
     private boolean isTestCaseTypeSupported = false;
     private PluginConfiguration pluginConfiguration;
-    private ObjectMapper objectMapper;
     private BuildListener listener;
 
     private RestAdapter rest;
@@ -39,7 +40,6 @@ public class CodebeamerApiClient {
         this.pluginConfiguration = pluginConfiguration;
         this.listener = listener;
 
-        objectMapper = new ObjectMapper();
         this.rest = rest;
     }
 

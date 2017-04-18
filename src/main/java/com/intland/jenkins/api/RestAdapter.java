@@ -1,13 +1,8 @@
 /*
- * Copyright by Intland Software
+ * Copyright (c) 2017 Intland Software (support@intland.com)
  *
- * All rights reserved.
- *
- * This software is the confidential and proprietary information
- * of Intland Software. ("Confidential Information"). You
- * shall not disclose such Confidential Information and shall use
- * it only in accordance with the terms of the license agreement
- * you entered into with Intland.
+ * Additional information can be found here: https://codebeamer.com/cb/project/1025
+ * If you find any bugs please use the Tracker page to report them: https://codebeamer.com/cb/project/1025/tracker
  */
 package com.intland.jenkins.api;
 
