@@ -79,8 +79,8 @@ public class CodebeamerApiClient {
             }
         }
 
-        TrackerItemDto parentItem = createParentTestRun(tests, buildIdentifier, build, pluginConfiguration.getTestConfigurationId(), testSetId, testCasesForCurrentTestRun.values());
-        XUnitUtil.log(listener, String.format("Parent TestRun created with name: %s and id: %s ", parentItem.getName(), parentItem.getId()));
+        TrackerItemDto parentTestRun = createParentTestRun(tests, buildIdentifier, build, pluginConfiguration.getTestConfigurationId(), testSetId, testCasesForCurrentTestRun.values());
+        XUnitUtil.log(listener, String.format("Parent TestRun created with name: %s and id: %s ", parentTestRun.getName(), parentTestRun.getId()));
 
         int uploadCounter = 0;
         int numberOfReportedBugs = 0;
@@ -93,7 +93,7 @@ public class CodebeamerApiClient {
             List<TestRunDto> testRuns = new ArrayList<>(testBatch.size());
             for (TestResultItem test : testBatch) {
                 Integer testCaseId = testCasesForCurrentTestRun.get(test.getFullName());
-                testRuns.add(createTestRunObject(pluginConfiguration.getTestConfigurationId(), testSetId, parentItem, test, testCaseId));
+                testRuns.add(createTestRunObject(pluginConfiguration.getTestConfigurationId(), testSetId, parentTestRun, test, testCaseId));
             }
 
             TrackerItemDto[] createdRuns = rest.postTrackerItems(testRuns);
@@ -123,6 +123,7 @@ public class CodebeamerApiClient {
         }
 
         updateTestSetTestCases(testSetId, testCasesForCurrentTestRun.values());
+        updateTrackerItemStatus(parentTestRun.getId(), "Finished");
         updateTrackerItemStatus(testSetId, "Completed"); // meaning: resolved
         XUnitUtil.log(listener, "Upload finished, uploaded: " + uploadCounter + " test runs");
     }
