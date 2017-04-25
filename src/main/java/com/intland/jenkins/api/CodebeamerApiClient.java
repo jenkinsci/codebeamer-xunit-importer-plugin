@@ -23,13 +23,11 @@ import java.util.*;
 import static com.intland.jenkins.api.RestAdapter.PAGESIZE;
 
 public class CodebeamerApiClient {
-    public static final int HTTP_TIMEOUT_LONG = 45000;
-    public static final int HTTP_TIMEOUT_SHORT = 10000;
-    public static final int UPLOAD_BATCH_SIZE = 20;
+    public static final int HTTP_TIMEOUT_LONG = 45000; // ms
+    public static final int HTTP_TIMEOUT_SHORT = 10000; // ms
+    private static final int UPLOAD_BATCH_SIZE = 20;
     private final String DEFAULT_TESTSET_NAME = "Jenkins-xUnit";
     private final String TEST_CASE_TYPE_NAME = "Automated";
-    private final String COMPLETED_STATUS = "Completed";
-    private final String MIN_VERSION_BATCH_UPDATE = "8.1.0";
     private boolean isTestCaseTypeSupported = false;
     private PluginConfiguration pluginConfiguration;
     private BuildListener listener;
@@ -46,13 +44,6 @@ public class CodebeamerApiClient {
     public void postTestRuns(TestResults tests, AbstractBuild<?, ?> build) throws IOException {
         String buildIdentifier = getBuildIdentifier(build);
         XUnitUtil.log(listener, "Starting xUnit tests upload");
-
-        XUnitUtil.log(listener, "Checking codeBeamer version");
-        String version = getCodebeamerVersion();
-        boolean isBatchUploadSupported = XUnitUtil.versionCompare(version, MIN_VERSION_BATCH_UPDATE) >= 0;
-        int uploadBatchSize = isBatchUploadSupported ? UPLOAD_BATCH_SIZE : 1;
-        XUnitUtil.log(listener, String.format("codeBeamer version: %s, batch upload supported: %s, upload size: %s", version,
-                isBatchUploadSupported, uploadBatchSize));
 
         XUnitUtil.log(listener, "Checking supported Test Case types");
         isTestCaseTypeSupported = isTestCaseTypeSupported();
@@ -96,7 +87,7 @@ public class CodebeamerApiClient {
         List<TestResultItem> testsToUpload = tests.getTestResultItems();
         int toUploadSize = testsToUpload.size();
         while (uploadCounter < testsToUpload.size()) {
-            int toIndex = uploadCounter + uploadBatchSize < toUploadSize ? uploadCounter + uploadBatchSize : toUploadSize;
+            int toIndex = uploadCounter + UPLOAD_BATCH_SIZE < toUploadSize ? uploadCounter + UPLOAD_BATCH_SIZE : toUploadSize;
             List<TestResultItem> testBatch = testsToUpload.subList(uploadCounter, toIndex);
 
             List<TestRunDto> testRuns = new ArrayList<>(testBatch.size());
@@ -113,7 +104,7 @@ public class CodebeamerApiClient {
 
                 long duration = (long) (testBatch.get(i).getDuration() * 1000);
                 TrackerItemDto createdRun = createdRuns[i];
-                TestCaseDto testCaseDto = new TestCaseDto(createdRun.getId(), COMPLETED_STATUS);
+                TestCaseDto testCaseDto = new TestCaseDto(createdRun.getId(), "Finished"); // meaning: closed
                 testCaseDto.setSpentMillis(duration);
                 testCaseDtos.add(testCaseDto);
 
@@ -132,7 +123,7 @@ public class CodebeamerApiClient {
         }
 
         updateTestSetTestCases(testSetId, testCasesForCurrentTestRun.values());
-        updateTrackerItemStatus(testSetId, COMPLETED_STATUS);
+        updateTrackerItemStatus(testSetId, "Completed"); // meaning: resolved
         XUnitUtil.log(listener, "Upload finished, uploaded: " + uploadCounter + " test runs");
     }
 
