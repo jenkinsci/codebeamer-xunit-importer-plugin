@@ -98,6 +98,11 @@ public class XUnitImporter extends Notifier {
 
 
         AbstractTestResultAction action = build.getAction(AbstractTestResultAction.class);
+        if (action == null) {
+            // previous step failed to execute, e.g. no test report files found
+            XUnitUtil.log(listener, "Previous action failed, aborting...");
+            return false;
+        }
         TestResults testResults = XUnitUtil.getTestResultItems(action, pluginConfiguration);
 
         apiClient.postTestRuns(testResults, build);
