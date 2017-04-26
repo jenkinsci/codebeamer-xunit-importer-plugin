@@ -15,6 +15,10 @@ public class PluginUtil {
         return isPluginInstalled("mercurial");
     }
 
+    public static boolean isSubversionPluginInstalled() {
+        return isPluginInstalled("subversion");
+    }
+
     private static boolean isPluginInstalled(String pluginName) {
         return Jenkins.getInstance().getPlugin(pluginName) != null;
     }

@@ -11,6 +11,9 @@ import hudson.plugins.git.Revision;
 import hudson.plugins.git.util.BuildData;
 import hudson.plugins.mercurial.MercurialTagAction;
 import hudson.scm.ChangeLogSet;
+import hudson.scm.SubversionSCM;
+import hudson.scm.SubversionSCM.ModuleLocation;
+import hudson.scm.SubversionTagAction;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -42,6 +45,16 @@ public class ScmDataCollector {
         } else if (PluginUtil.isMercurialPluginInstalled() && build.getAction(MercurialTagAction.class) != null) {
             MercurialTagAction hgScm = build.getAction(MercurialTagAction.class);
             repositoryLine = hgScm.getId();
+        } else if (PluginUtil.isSubversionPluginInstalled() && build.getAction(SubversionTagAction.class) != null) {
+            // SVN
+            SubversionTagAction svnScm = build.getAction(SubversionTagAction.class);
+            AbstractBuild mybuild = svnScm.getBuild();
+            SubversionSCM scm = (SubversionSCM) mybuild.getProject().getScm();
+            ModuleLocation[] locs = scm.getLocations();
+            String remote = locs[0].remote;
+
+            String cbRepoUrl = apiClient.getCodeBeamerRepoUrlForSVN(remote);
+            repositoryLine = String.format("[%s]", cbRepoUrl);
         }
 
         for (ChangeLogSet.Entry entry : build.getChangeSet()) {

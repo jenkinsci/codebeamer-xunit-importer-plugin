@@ -354,4 +354,19 @@ public class CodebeamerApiClient {
 
         return pluginConfiguration.getUri() + repositoryDto.getUri();
     }
+
+    public String getCodeBeamerRepoUrlForSVN(String remote) {
+        String[] segments = remote.split("/");
+        // 0 = 'svn:' or 'http(s):', 1 = '', 2 = hostname
+        for (int i = 3; i < segments.length; ++i) {
+            String segment = segments[i];
+            try {
+                RepositoryDto repositoryDto = rest.getRepositoryUrl(segment, "svn");
+                return pluginConfiguration.getUri() + repositoryDto.getUri();
+            } catch (IOException ex) {
+                continue;
+            }
+        }
+        return "";
+    }
 }
