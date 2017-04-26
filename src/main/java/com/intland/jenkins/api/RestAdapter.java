@@ -72,7 +72,7 @@ public class RestAdapter {
                 .custom()
                 .setConnectionRequestTimeout(timeout)
                 .setConnectTimeout(timeout)
-                .setSocketTimeout(timeout)
+                .setSocketTimeout(timeout * 4)
                 .build();
         this.objectMapper = new ObjectMapper();
     }
