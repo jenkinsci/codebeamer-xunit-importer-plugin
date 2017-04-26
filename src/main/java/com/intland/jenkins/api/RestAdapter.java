@@ -117,6 +117,11 @@ public class RestAdapter {
         return objectMapper.readValue(json, UserDto.class);
     }
 
+    public RepositoryDto getRepositoryUrl(String name, String type) throws IOException {
+        String json = executeGet(baseUrl + String.format("/%s/%s", type, name));
+        return objectMapper.readValue(json, RepositoryDto.class);
+    }
+
     private String executeGet(String uri) throws IOException {
         HttpGet get = new HttpGet(uri);
         get.setConfig(requestConfig);

@@ -346,4 +346,12 @@ public class CodebeamerApiClient {
         }
         return null;
     }
+
+    public String getCodeBeamerRepoUrlForGit(String repoUrl) throws IOException {
+        String[] segments = repoUrl.split("/");
+        String name = segments[segments.length - 1];
+        RepositoryDto repositoryDto = rest.getRepositoryUrl(name, "git");
+
+        return pluginConfiguration.getUri() + repositoryDto.getUri();
+    }
 }

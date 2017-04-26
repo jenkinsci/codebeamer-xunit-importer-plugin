@@ -28,13 +28,16 @@ public class ScmDataCollector {
         if (PluginUtil.isGitPluginInstalled() && build.getAction(BuildData.class) != null) {
             BuildData gitScm = build.getAction(BuildData.class);
             String repoUrl = (String)(gitScm.getRemoteUrls()).toArray()[0];
+
+            String cbRepoUrl = apiClient.getCodeBeamerRepoUrlForGit(repoUrl);
+
             Revision revision = gitScm.getLastBuiltRevision();
             if (revision != null) { //revision can be null for first shallow clone
                 String repoRevision = gitScm.getLastBuiltRevision().getSha1String();
                 String repoBranchName =  ((List<Branch>) gitScm.getLastBuiltRevision().getBranches()).get(0).getName();
-                repositoryLine = String.format("[%s], %s, branch: %s", repoUrl, repoRevision, repoBranchName);
+                repositoryLine = String.format("[%s], %s, branch: %s", cbRepoUrl, repoRevision, repoBranchName);
             } else {
-                repositoryLine = String.format("[%s], revision information not available with shallow clone at first run", repoUrl);
+                repositoryLine = String.format("[%s], revision information not available with shallow clone at first run", cbRepoUrl);
             }
         } else if (PluginUtil.isMercurialPluginInstalled() && build.getAction(MercurialTagAction.class) != null) {
             MercurialTagAction hgScm = build.getAction(MercurialTagAction.class);
