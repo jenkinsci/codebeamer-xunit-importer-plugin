@@ -57,17 +57,24 @@ public class ScmDataCollector {
             repositoryLine = String.format("[%s]", cbRepoUrl);
         }
 
+        // This is only called when there has been a commit since the last run
         for (ChangeLogSet.Entry entry : build.getChangeSet()) {
-            String author = entry.getAuthor().toString();
-            String userId = apiClient.getUserId(author);
+            String author = getAuthorString(entry);
             String commitMessage = getCommitMessage(entry);
             String commitMessageWithTaskLink = getCodebeamerTaskLink(commitMessage);
-            String formattedUser = userId == null ? String.format("(%s)", author) : String.format("([USER:%s])", userId);
+            String formattedUser = String.format("%s", author);
 
             changes += String.format("* %s %s\n", commitMessageWithTaskLink, formattedUser);
         }
 
         return new ScmDto(repositoryLine, changes);
+    }
+
+    private static String getAuthorString(ChangeLogSet.Entry entry) {
+        if (entry instanceof GitChangeSet) {
+            return String.format("%s (%s)", ((GitChangeSet) entry).getAuthorName(), ((GitChangeSet) entry).getAuthorEmail());
+        }
+        return entry.getAuthor().toString();
     }
 
     //Special treatment for git, entry.getMsg() truncates multiline git comments

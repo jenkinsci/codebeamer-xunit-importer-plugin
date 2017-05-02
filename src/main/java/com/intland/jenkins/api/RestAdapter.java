@@ -112,11 +112,6 @@ public class RestAdapter {
         return objectMapper.readValue(json, TrackerDto.class);
     }
 
-    public UserDto getUserId(String author) throws IOException {
-        String json = executeGet(baseUrl + String.format("/user/%s", author.replace(" ", "")));
-        return objectMapper.readValue(json, UserDto.class);
-    }
-
     public RepositoryDto getRepositoryUrl(String name, String type) throws IOException {
         String json = executeGet(baseUrl + String.format("/%s/%s", type, name));
         return objectMapper.readValue(json, RepositoryDto.class);

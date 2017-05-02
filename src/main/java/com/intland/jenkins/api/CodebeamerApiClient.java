@@ -338,15 +338,6 @@ public class CodebeamerApiClient {
         return rest.getTrackerType(trackerId);
     }
 
-    public String getUserId(String author)  throws IOException {
-        UserDto userDto = rest.getUserId(author);
-        if (userDto != null) {
-            String uri = userDto.getUri();
-            return uri.substring(uri.lastIndexOf("/") + 1);
-        }
-        return null;
-    }
-
     public String getCodeBeamerRepoUrlForGit(String repoUrl) throws IOException {
         String[] segments = repoUrl.split("/");
         String name = segments[segments.length - 1];
