@@ -38,9 +38,9 @@ public class ScmDataCollector {
             if (revision != null) { //revision can be null for first shallow clone
                 String repoRevision = gitScm.getLastBuiltRevision().getSha1String();
                 String repoBranchName =  ((List<Branch>) gitScm.getLastBuiltRevision().getBranches()).get(0).getName();
-                repositoryLine = String.format("[%s], %s, branch: %s", cbRepoUrl, repoRevision, repoBranchName);
+                repositoryLine = String.format("%s, %s, branch: %s", cbRepoUrl, repoRevision, repoBranchName);
             } else {
-                repositoryLine = String.format("[%s], revision information not available with shallow clone at first run", cbRepoUrl);
+                repositoryLine = String.format("%s, revision information not available with shallow clone at first run", cbRepoUrl);
             }
         } else if (PluginUtil.isMercurialPluginInstalled() && build.getAction(MercurialTagAction.class) != null) {
             MercurialTagAction hgScm = build.getAction(MercurialTagAction.class);
@@ -54,7 +54,7 @@ public class ScmDataCollector {
             String remote = locs[0].remote;
 
             String cbRepoUrl = apiClient.getCodeBeamerRepoUrlForSVN(remote);
-            repositoryLine = String.format("[%s]", cbRepoUrl);
+            repositoryLine = String.format("%s", cbRepoUrl);
         }
 
         // This is only called when there has been a commit since the last run

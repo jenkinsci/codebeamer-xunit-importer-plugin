@@ -339,25 +339,30 @@ public class CodebeamerApiClient {
     }
 
     public String getCodeBeamerRepoUrlForGit(String repoUrl) throws IOException {
+        // Name of Git repository is the string after the last /
         String[] segments = repoUrl.split("/");
         String name = segments[segments.length - 1];
-        RepositoryDto repositoryDto = rest.getRepositoryUrl(name, "git");
-
-        return pluginConfiguration.getUri() + repositoryDto.getUri();
+        try {
+            RepositoryDto repositoryDto = rest.getRepositoryUrl(name, "git");
+            return String.format("[%s%s]", pluginConfiguration.getUri(), repositoryDto.getUri());
+        } catch (IOException ex) {
+            return "not managed by codeBeamer";
+        }
     }
 
     public String getCodeBeamerRepoUrlForSVN(String remote) {
+        // We don't now for sure which part of the string is the name of the repository so we have to try until we succeed
         String[] segments = remote.split("/");
         // 0 = 'svn:' or 'http(s):', 1 = '', 2 = hostname
         for (int i = 3; i < segments.length; ++i) {
             String segment = segments[i];
             try {
                 RepositoryDto repositoryDto = rest.getRepositoryUrl(segment, "svn");
-                return pluginConfiguration.getUri() + repositoryDto.getUri();
+                return String.format("[%s%s]", pluginConfiguration.getUri(), repositoryDto.getUri());
             } catch (IOException ex) {
                 continue;
             }
         }
-        return "";
+        return "not managed by codeBeamer";
     }
 }
