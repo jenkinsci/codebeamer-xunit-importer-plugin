@@ -5,6 +5,7 @@ package com.intland.jenkins.markup;
 
 import com.intland.jenkins.api.CodebeamerApiClient;
 import hudson.model.AbstractBuild;
+import hudson.model.Run;
 import hudson.plugins.git.Branch;
 import hudson.plugins.git.GitChangeSet;
 import hudson.plugins.git.Revision;
@@ -16,6 +17,7 @@ import hudson.scm.SubversionSCM.ModuleLocation;
 import hudson.scm.SubversionTagAction;
 
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -24,7 +26,7 @@ import java.util.regex.Pattern;
 public class ScmDataCollector {
     private static final Pattern scmTaskIdPattern = Pattern.compile("(#([1-9][0-9]{3,9})((,|\\s+)[1-9][0-9]{3,9})*)(?:\\z|[\\s.,;:)/\\-]+)");
 
-    public static ScmDto collectScmData(AbstractBuild<?, ?> build, CodebeamerApiClient apiClient) throws IOException {
+    public static ScmDto collectScmData(Run<?, ?> build, CodebeamerApiClient apiClient) throws IOException {
         String repositoryLine = "Unsupported SCM";
         String changes = "";
 
@@ -58,15 +60,29 @@ public class ScmDataCollector {
         }
 
         // This is only called when there has been a commit since the last run
-        for (ChangeLogSet.Entry entry : build.getChangeSet()) {
-            String author = getAuthorString(entry);
-            String commitMessage = getCommitMessage(entry);
-            String commitMessageWithTaskLink = getCodebeamerTaskLink(commitMessage);
-            String formattedUser = String.format("%s", author);
+        ChangeLogSet<? extends ChangeLogSet.Entry> changeLogSet = null;
+        if (build instanceof AbstractBuild<?, ?>) {
+            changeLogSet = ((AbstractBuild) build).getChangeSet();
+        } else {
+            try {
+                List<ChangeLogSet<? extends  ChangeLogSet.Entry>> list = (List<ChangeLogSet<? extends ChangeLogSet.Entry>>) build.getClass().getMethod("getChangeSets").invoke(build);
+                if (!list.isEmpty()) {
+                    changeLogSet = list.get(0);
+                }
+            } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
 
-            changes += String.format("* %s %s\n", commitMessageWithTaskLink, formattedUser);
+            }
         }
+        if (changeLogSet != null) {
+            for (ChangeLogSet.Entry entry: changeLogSet) {
+                String author = getAuthorString(entry);
+                String commitMessage = getCommitMessage(entry);
+                String commitMessageWithTaskLink = getCodebeamerTaskLink(commitMessage);
+                String formattedUser = String.format("%s", author);
 
+                changes += String.format("* %s %s\n", commitMessageWithTaskLink, formattedUser);
+            }
+        }
         return new ScmDto(repositoryLine, changes);
     }
 

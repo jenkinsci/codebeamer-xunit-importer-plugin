@@ -4,9 +4,8 @@
 
 package com.intland.jenkins.markup;
 
-import hudson.model.AbstractBuild;
-import hudson.model.BuildListener;
 import hudson.model.Run;
+import hudson.model.TaskListener;
 import hudson.tasks.test.AbstractTestResultAction;
 import hudson.tasks.test.AggregatedTestResultAction;
 import hudson.tasks.test.TestResult;
@@ -14,7 +13,7 @@ import hudson.tasks.test.TestResult;
 import java.util.List;
 
 public class TestResultCollector {
-    public static TestResultDto collectTestResultData(AbstractBuild<?, ?> build, BuildListener listener) {
+    public static TestResultDto collectTestResultData(Run<?, ?> build, TaskListener listener) {
         String formattedTestDuration = "";
         int totalCount = 0;
         int failCount = 0;
@@ -65,7 +64,7 @@ public class TestResultCollector {
         return new TestResultDto(formattedTestDuration, totalCount, failCount, failedDifference, testDuration);
     }
 
-    private static Object getPreviousTestResult(AbstractBuild build) {
+    private static Object getPreviousTestResult(Run build) {
         AbstractTestResultAction result = null;
 
         int counter = build.getNumber();

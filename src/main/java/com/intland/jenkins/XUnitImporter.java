@@ -2,6 +2,7 @@
  * Copyright (c) 2016 Intland Software (support@intland.com)
  */
 package com.intland.jenkins;
+
 import com.intland.jenkins.api.CodebeamerApiClient;
 import com.intland.jenkins.api.RestAdapter;
 import com.intland.jenkins.api.dto.TrackerDto;
@@ -9,8 +10,8 @@ import com.intland.jenkins.api.dto.TrackerItemDto;
 import com.intland.jenkins.dto.PluginConfiguration;
 import com.intland.jenkins.dto.TestResults;
 import hudson.Extension;
+import hudson.FilePath;
 import hudson.Launcher;
-
 import hudson.model.*;
 import hudson.tasks.BuildStepDescriptor;
 import hudson.tasks.BuildStepMonitor;
@@ -18,13 +19,15 @@ import hudson.tasks.Notifier;
 import hudson.tasks.Publisher;
 import hudson.tasks.test.AbstractTestResultAction;
 import hudson.util.FormValidation;
+import jenkins.tasks.SimpleBuildStep;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 
+import javax.annotation.Nonnull;
 import java.io.IOException;
 
 
-public class XUnitImporter extends Notifier {
+public class XUnitImporter extends Notifier implements SimpleBuildStep {
     public static final String PLUGIN_SHORTNAME = "codebeamer-xunit-importer";
     private String uri;
     private String username;
@@ -71,7 +74,7 @@ public class XUnitImporter extends Notifier {
     }
 
     @Override
-    public boolean perform(AbstractBuild<?, ?> build, Launcher launcher, BuildListener listener) throws IOException {
+    public void perform(@Nonnull Run<?, ?> build, @Nonnull FilePath filePath, @Nonnull Launcher launcher, @Nonnull TaskListener listener) throws InterruptedException, IOException {
         PluginConfiguration pluginConfiguration = getPluginConfiguration();
 
         RestAdapter restAdapter = new RestAdapter(pluginConfiguration, CodebeamerApiClient.HTTP_TIMEOUT_LONG, listener);
@@ -81,7 +84,7 @@ public class XUnitImporter extends Notifier {
             TrackerItemDto trackerItemDto = apiClient.getTrackerItem(testCaseParentId);
             if (trackerItemDto == null) {
                 XUnitUtil.log(listener, "Test Case Top Node ID item does not exist");
-                return false;
+                return;
             }
 
             pluginConfiguration.setTestCaseTrackerId(trackerItemDto.getTracker().getId());
@@ -91,7 +94,7 @@ public class XUnitImporter extends Notifier {
             TrackerItemDto trackerItemDto = apiClient.getTrackerItem(requirementParentId);
             if (trackerItemDto == null) {
                 XUnitUtil.log(listener, "Requirement Top Node ID item does not exist");
-                return false;
+                return;
             }
             pluginConfiguration.setRequirementTrackerId(trackerItemDto.getTracker().getId());
         }
@@ -101,13 +104,13 @@ public class XUnitImporter extends Notifier {
         if (action == null) {
             // previous step failed to execute, e.g. no test report files found
             XUnitUtil.log(listener, "Previous action failed, aborting...");
-            return false;
+            return;
         }
+
         TestResults testResults = XUnitUtil.getTestResultItems(action, pluginConfiguration);
 
-        apiClient.postTestRuns(testResults, build);
+        apiClient.postTestRuns(testResults, build, filePath);
 
-        return true;
     }
 
     // Getter for jenkins UI
@@ -287,7 +290,7 @@ public class XUnitImporter extends Notifier {
                         result = FormValidation.error("Tracker Item can not be found");
                     }
                 } catch (IOException e) {
-                    result = FormValidation.error("codeBeamer could not be reached with the provided uri/credentials");
+                    result = FormValidation.error("codeBeamer could not be reached with the provided uri/credentials; IOException: " + e.getMessage());
                 }
             } else if (required) {
                 result = FormValidation.error("This field is required");
@@ -307,7 +310,7 @@ public class XUnitImporter extends Notifier {
                         result = FormValidation.error("Tracker Type does not match the required Type");
                     }
                 } catch (IOException e) {
-                    result = FormValidation.error("codeBeamer could not be reached with the provided uri/credentials");
+                    result = FormValidation.error("codeBeamer could not be reached with the provided uri/credentials; IOException: " + e.getMessage());
                 }
             } else if (required) {
                 result = FormValidation.error("This field is required");

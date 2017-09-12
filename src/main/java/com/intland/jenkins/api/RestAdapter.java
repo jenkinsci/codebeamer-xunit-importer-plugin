@@ -11,7 +11,7 @@ import com.intland.jenkins.XUnitUtil;
 import com.intland.jenkins.api.dto.*;
 import com.intland.jenkins.api.dto.trackerschema.TrackerSchemaDto;
 import com.intland.jenkins.dto.PluginConfiguration;
-import hudson.model.BuildListener;
+import hudson.model.TaskListener;
 import jcifs.util.Base64;
 import org.apache.commons.io.Charsets;
 import org.apache.http.Header;
@@ -43,14 +43,14 @@ public class RestAdapter {
     public static final int PAGESIZE = 500;
 
     private String baseUrl;
-    private BuildListener listener;
+    private TaskListener listener;
     private PluginConfiguration pluginConfiguration;
 
     private HttpClient client;
     private RequestConfig requestConfig;
     private ObjectMapper objectMapper;
 
-    public RestAdapter(PluginConfiguration pluginConfiguration, int timeout, BuildListener listener) {
+    public RestAdapter(PluginConfiguration pluginConfiguration, int timeout, TaskListener listener) {
         this.baseUrl = pluginConfiguration.getUri() + "/rest";
         this.listener = listener;
         this.pluginConfiguration = pluginConfiguration;

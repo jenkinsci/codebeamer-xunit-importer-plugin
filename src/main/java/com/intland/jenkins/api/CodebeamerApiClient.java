@@ -14,8 +14,9 @@ import com.intland.jenkins.dto.PluginConfiguration;
 import com.intland.jenkins.dto.TestResultItem;
 import com.intland.jenkins.dto.TestResults;
 import com.intland.jenkins.markup.*;
-import hudson.model.AbstractBuild;
-import hudson.model.BuildListener;
+import hudson.FilePath;
+import hudson.model.Run;
+import hudson.model.TaskListener;
 
 import java.io.IOException;
 import java.util.*;
@@ -30,18 +31,18 @@ public class CodebeamerApiClient {
     private final String TEST_CASE_TYPE_NAME = "Automated";
     private boolean isTestCaseTypeSupported = false;
     private PluginConfiguration pluginConfiguration;
-    private BuildListener listener;
+    private TaskListener listener;
 
     private RestAdapter rest;
 
-    public CodebeamerApiClient(PluginConfiguration pluginConfiguration, BuildListener listener, int timeout, RestAdapter rest) {
+    public CodebeamerApiClient(PluginConfiguration pluginConfiguration, TaskListener listener, int timeout, RestAdapter rest) {
         this.pluginConfiguration = pluginConfiguration;
         this.listener = listener;
 
         this.rest = rest;
     }
 
-    public void postTestRuns(TestResults tests, AbstractBuild<?, ?> build) throws IOException {
+    public void postTestRuns(TestResults tests, Run<?, ?> build, FilePath filePath) throws IOException {
         String buildIdentifier = getBuildIdentifier(build);
         XUnitUtil.log(listener, "Starting xUnit tests upload");
 
@@ -79,7 +80,7 @@ public class CodebeamerApiClient {
             }
         }
 
-        TrackerItemDto parentTestRun = createParentTestRun(tests, buildIdentifier, build, pluginConfiguration.getTestConfigurationId(), testSetId, testCasesForCurrentTestRun.values());
+        TrackerItemDto parentTestRun = createParentTestRun(tests, buildIdentifier, build, filePath, pluginConfiguration.getTestConfigurationId(), testSetId, testCasesForCurrentTestRun.values());
         XUnitUtil.log(listener, String.format("Parent TestRun created with name: %s and id: %s ", parentTestRun.getName(), parentTestRun.getId()));
 
         int uploadCounter = 0;
@@ -191,9 +192,8 @@ public class CodebeamerApiClient {
         return testRunDto;
     }
 
-    private String createParentMarkup(AbstractBuild<?, ?> build) throws IOException {
-        long currentTime = System.currentTimeMillis();
-        BuildDto buildDto = BuildDataCollector.collectBuildData(build, currentTime);
+    private String createParentMarkup(Run<?, ?> build, FilePath filePath) throws IOException {
+        BuildDto buildDto = BuildDataCollector.collectBuildData(build, filePath);
         ScmDto scmDto = ScmDataCollector.collectScmData(build, this);
         TestResultDto testResultDto = TestResultCollector.collectTestResultData(build, listener);
 
@@ -205,8 +205,8 @@ public class CodebeamerApiClient {
                 .build();
     }
 
-    private TrackerItemDto createParentTestRun(TestResults tests, String buildIdentifier, AbstractBuild<?, ?> build, Integer testConfigurationId, Integer testSetId, Collection<Integer> testCaseIds) throws IOException {
-        String newMarkupContent = createParentMarkup(build);
+    private TrackerItemDto createParentTestRun(TestResults tests, String buildIdentifier, Run<?, ?> build, FilePath filePath, Integer testConfigurationId, Integer testSetId, Collection<Integer> testCaseIds) throws IOException {
+        String newMarkupContent = createParentMarkup(build, filePath);
         TestRunDto parentRunDto = new TestRunDto(buildIdentifier, null, pluginConfiguration.getTestRunTrackerId(), testCaseIds, testConfigurationId, tests.getStatus());
         parentRunDto.setTestSet(testSetId);
         parentRunDto.setDescription(tests.getTestSummary().toWikiMarkup() + newMarkupContent);
@@ -235,8 +235,8 @@ public class CodebeamerApiClient {
         }
     }
 
-    private String getBuildIdentifier(AbstractBuild<?, ?> build) {
-        return build.getProject().getName() + " #" + build.getNumber();
+    private String getBuildIdentifier(Run<?, ?> build) {
+        return build.getParent().getName() + " #" + build.getNumber();
     }
 
     private Integer findOrCreateTrackerItemInTree(String fullName, Integer trackerId, NodeMapping nodeMapping, Integer folder, Integer limit, String status) throws IOException {

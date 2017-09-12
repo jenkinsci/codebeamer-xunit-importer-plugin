@@ -5,7 +5,7 @@ package com.intland.jenkins;
 
 import com.intland.jenkins.api.dto.TrackerItemDto;
 import com.intland.jenkins.dto.*;
-import hudson.model.BuildListener;
+import hudson.model.TaskListener;
 import hudson.tasks.junit.CaseResult;
 import hudson.tasks.junit.SuiteResult;
 import hudson.tasks.junit.TestResult;
@@ -119,7 +119,7 @@ public class XUnitUtil {
         return result;
     }
 
-    public static void log(BuildListener listener, String message) {
+    public static void log(TaskListener listener, String message) {
         String log = String.format("%s %s", DATE_FORMAT.format(new Date()), message);
         listener.getLogger().println(log);
     }
