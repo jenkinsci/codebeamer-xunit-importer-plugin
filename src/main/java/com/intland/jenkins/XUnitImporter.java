@@ -21,6 +21,7 @@ import hudson.tasks.test.AbstractTestResultAction;
 import hudson.util.FormValidation;
 import jenkins.tasks.SimpleBuildStep;
 import org.kohsuke.stapler.DataBoundConstructor;
+import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
 
 import javax.annotation.Nonnull;
@@ -49,6 +50,29 @@ public class XUnitImporter extends Notifier implements SimpleBuildStep {
     private String truncatePackageTree;
 
     @DataBoundConstructor
+    public XUnitImporter(String uri, String username, String password, Integer testSetTrackerId, Integer testCaseTrackerId,
+                         Integer testRunTrackerId, Integer testConfigurationId) {
+        this.uri = uri;
+        this.username = username;
+        this.password = password;
+        this.testSetTrackerId = testSetTrackerId;
+        this.testCaseTrackerId = testCaseTrackerId;
+        this.testCaseParentId = null;
+        this.testRunTrackerId = testRunTrackerId;
+        this.testConfigurationId = testConfigurationId;
+        this.requirementTrackerId = null;
+        this.requirementDepth = null;
+        this.requirementParentId = null;
+        this.bugTrackerId = null;
+        this.numberOfBugsToReport = null;
+        this.releaseId = null;
+        this.build = null;
+        this.includedPackages = null;
+        this.excludedPackages = null;
+        this.truncatePackageTree = null;
+    }
+
+    @Deprecated
     public XUnitImporter(String uri, String username, String password, Integer testSetTrackerId, Integer testCaseTrackerId, Integer testCaseParentId,
                          Integer testRunTrackerId, Integer testConfigurationId, Integer requirementTrackerId, Integer requirementDepth,
                          Integer requirementParentId, Integer bugTrackerId, Integer numberOfBugsToReport, Integer releaseId, String build,
@@ -122,6 +146,11 @@ public class XUnitImporter extends Notifier implements SimpleBuildStep {
         return testCaseParentId;
     }
 
+    @DataBoundSetter
+    public void setTestCaseParentId(Integer testCaseParentId) {
+        this.testCaseParentId = testCaseParentId;
+    }
+
     public String getPassword() {
         return password;
     }
@@ -146,20 +175,45 @@ public class XUnitImporter extends Notifier implements SimpleBuildStep {
         return truncatePackageTree;
     }
 
+    @DataBoundSetter
+    public void setTruncatePackageTree(String truncatePackageTree) {
+        this.truncatePackageTree = truncatePackageTree;
+    }
+
     public String getIncludedPackages() {
         return includedPackages;
+    }
+
+    @DataBoundSetter
+    public void setIncludedPackages(String includedPackages) {
+        this.includedPackages = includedPackages;
     }
 
     public String getExcludedPackages() {
         return excludedPackages;
     }
 
+    @DataBoundSetter
+    public void setExcludedPackages(String excludedPackages) {
+        this.excludedPackages = excludedPackages;
+    }
+
     public Integer getRequirementDepth() {
         return requirementDepth;
     }
 
+    @DataBoundSetter
+    public void setRequirementDepth(Integer requirementDepth) {
+        this.requirementDepth = requirementDepth;
+    }
+
     public Integer getRequirementParentId() {
         return requirementParentId;
+    }
+
+    @DataBoundSetter
+    public void setRequirementParentId(Integer requirementParentId) {
+        this.requirementParentId = requirementParentId;
     }
 
     public Integer getTestConfigurationId() {
@@ -170,20 +224,45 @@ public class XUnitImporter extends Notifier implements SimpleBuildStep {
         return bugTrackerId;
     }
 
+    @DataBoundSetter
+    public void setBugTrackerId(Integer bugTrackerId) {
+        this.bugTrackerId = bugTrackerId;
+    }
+
     public Integer getNumberOfBugsToReport() {
         return numberOfBugsToReport;
+    }
+
+    @DataBoundSetter
+    public void setNumberOfBugsToReport(Integer numberOfBugsToReport) {
+        this.numberOfBugsToReport = numberOfBugsToReport;
     }
 
     public Integer getRequirementTrackerId() {
         return requirementTrackerId;
     }
 
+    @DataBoundSetter
+    public void setRequirementTrackerId(Integer requirementTrackerId) {
+        this.requirementTrackerId = requirementTrackerId;
+    }
+
     public Integer getReleaseId() {
         return releaseId;
     }
 
+    @DataBoundSetter
+    public void setReleaseId(Integer releaseId) {
+        this.releaseId = releaseId;
+    }
+
     public String getBuild() {
         return build;
+    }
+
+    @DataBoundSetter
+    public void setBuild(String build) {
+        this.build = build;
     }
 
     @Override
