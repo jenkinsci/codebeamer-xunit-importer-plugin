@@ -46,11 +46,11 @@ public class PluginConfiguration {
     }
 
     public String getUsername() {
-        return credentials.getUsername();
+        return credentials != null ? credentials.getUsername() : "";
     }
 
     public String getPassword() {
-        return credentials.getPassword().getPlainText();
+        return credentials != null ? credentials.getPassword().getPlainText() : "";
     }
 
     public Integer getTestSetTrackerId() {
