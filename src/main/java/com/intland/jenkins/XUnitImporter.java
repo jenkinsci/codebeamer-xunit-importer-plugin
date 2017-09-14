@@ -3,6 +3,11 @@
  */
 package com.intland.jenkins;
 
+import com.cloudbees.plugins.credentials.CredentialsMatchers;
+import com.cloudbees.plugins.credentials.CredentialsProvider;
+import com.cloudbees.plugins.credentials.common.StandardListBoxModel;
+import com.cloudbees.plugins.credentials.common.StandardUsernamePasswordCredentials;
+import com.cloudbees.plugins.credentials.domains.DomainRequirement;
 import com.intland.jenkins.api.CodebeamerApiClient;
 import com.intland.jenkins.api.RestAdapter;
 import com.intland.jenkins.api.dto.TrackerDto;
@@ -13,26 +18,32 @@ import hudson.Extension;
 import hudson.FilePath;
 import hudson.Launcher;
 import hudson.model.*;
+import hudson.model.queue.Tasks;
+import hudson.security.ACL;
 import hudson.tasks.BuildStepDescriptor;
 import hudson.tasks.BuildStepMonitor;
 import hudson.tasks.Notifier;
 import hudson.tasks.Publisher;
 import hudson.tasks.test.AbstractTestResultAction;
 import hudson.util.FormValidation;
+import hudson.util.ListBoxModel;
+import jenkins.model.Jenkins;
 import jenkins.tasks.SimpleBuildStep;
+import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
 
 import javax.annotation.Nonnull;
 import java.io.IOException;
+import java.util.Collections;
+import java.util.UUID;
 
 
 public class XUnitImporter extends Notifier implements SimpleBuildStep {
     public static final String PLUGIN_SHORTNAME = "codebeamer-xunit-importer";
     private String uri;
-    private String username;
-    private String password;
+    private String credentialsId;
     private Integer testSetTrackerId;
     private Integer testCaseTrackerId;
     private Integer testCaseParentId;
@@ -50,11 +61,10 @@ public class XUnitImporter extends Notifier implements SimpleBuildStep {
     private String truncatePackageTree;
 
     @DataBoundConstructor
-    public XUnitImporter(String uri, String username, String password, Integer testSetTrackerId, Integer testCaseTrackerId,
+    public XUnitImporter(String uri, final String credentialsId, Integer testSetTrackerId, Integer testCaseTrackerId,
                          Integer testRunTrackerId, Integer testConfigurationId) {
         this.uri = uri;
-        this.username = username;
-        this.password = password;
+        this.credentialsId = credentialsId;
         this.testSetTrackerId = testSetTrackerId;
         this.testCaseTrackerId = testCaseTrackerId;
         this.testCaseParentId = null;
@@ -73,13 +83,12 @@ public class XUnitImporter extends Notifier implements SimpleBuildStep {
     }
 
     @Deprecated
-    public XUnitImporter(String uri, String username, String password, Integer testSetTrackerId, Integer testCaseTrackerId, Integer testCaseParentId,
+    public XUnitImporter(String uri, final String credentialsId, Integer testSetTrackerId, Integer testCaseTrackerId, Integer testCaseParentId,
                          Integer testRunTrackerId, Integer testConfigurationId, Integer requirementTrackerId, Integer requirementDepth,
                          Integer requirementParentId, Integer bugTrackerId, Integer numberOfBugsToReport, Integer releaseId, String build,
                          String includedPackages, String excludedPackages, String truncatePackageTree) {
         this.uri = uri;
-        this.username = username;
-        this.password = password;
+        this.credentialsId = credentialsId;
         this.testSetTrackerId = testSetTrackerId;
         this.testCaseTrackerId = testCaseTrackerId;
         this.testCaseParentId = testCaseParentId;
@@ -99,12 +108,12 @@ public class XUnitImporter extends Notifier implements SimpleBuildStep {
 
     @Override
     public void perform(@Nonnull Run<?, ?> build, @Nonnull FilePath filePath, @Nonnull Launcher launcher, @Nonnull TaskListener listener) throws InterruptedException, IOException {
-        PluginConfiguration pluginConfiguration = getPluginConfiguration();
+        PluginConfiguration pluginConfiguration = getPluginConfiguration(build.getParent());
 
         RestAdapter restAdapter = new RestAdapter(pluginConfiguration, CodebeamerApiClient.HTTP_TIMEOUT_LONG, listener);
         CodebeamerApiClient apiClient = new CodebeamerApiClient(pluginConfiguration, listener, CodebeamerApiClient.HTTP_TIMEOUT_LONG, restAdapter);
 
-        if (testCaseParentId != null ) {
+        if (testCaseParentId != null) {
             TrackerItemDto trackerItemDto = apiClient.getTrackerItem(testCaseParentId);
             if (trackerItemDto == null) {
                 XUnitUtil.log(listener, "Test Case Top Node ID item does not exist");
@@ -114,7 +123,7 @@ public class XUnitImporter extends Notifier implements SimpleBuildStep {
             pluginConfiguration.setTestCaseTrackerId(trackerItemDto.getTracker().getId());
         }
 
-        if (requirementParentId != null ) {
+        if (requirementParentId != null) {
             TrackerItemDto trackerItemDto = apiClient.getTrackerItem(requirementParentId);
             if (trackerItemDto == null) {
                 XUnitUtil.log(listener, "Requirement Top Node ID item does not exist");
@@ -151,12 +160,8 @@ public class XUnitImporter extends Notifier implements SimpleBuildStep {
         this.testCaseParentId = testCaseParentId;
     }
 
-    public String getPassword() {
-        return password;
-    }
-
-    public String getUsername() {
-        return username;
+    public String getCredentialsId() {
+        return credentialsId;
     }
 
     public String getUri() {
@@ -270,11 +275,10 @@ public class XUnitImporter extends Notifier implements SimpleBuildStep {
         return BuildStepMonitor.NONE;
     }
 
-    public PluginConfiguration getPluginConfiguration() {
+    public PluginConfiguration getPluginConfiguration(Item job) {
         PluginConfiguration pluginConfiguration = new PluginConfiguration();
         pluginConfiguration.setUri(uri);
-        pluginConfiguration.setUsername(username);
-        pluginConfiguration.setPassword(password);
+        pluginConfiguration.setCredentials(XUnitUtil.getCredentials(job, credentialsId));
         pluginConfiguration.setTestCaseTrackerId(testCaseTrackerId);
         pluginConfiguration.setTestCaseParentId(testCaseParentId);
         pluginConfiguration.setTestSetTrackerId(testSetTrackerId);
@@ -311,48 +315,86 @@ public class XUnitImporter extends Notifier implements SimpleBuildStep {
             return true;
         }
 
-        public FormValidation doCheckTestSetTrackerId(@QueryParameter Integer value, @QueryParameter String uri,  @QueryParameter String username, @QueryParameter String password) throws IOException {
-            return validateTrackerType(value, new PluginConfiguration(uri, username, password), true, 108);
+        @SuppressWarnings("unused")
+        public ListBoxModel doFillCredentialsIdItems(@AncestorInPath Item project, @QueryParameter String credentialsId) {
+            StandardListBoxModel result = new StandardListBoxModel();
+            if (project == null) {
+                if (!Jenkins.getActiveInstance().hasPermission(Jenkins.ADMINISTER)) {
+                    return result.includeCurrentValue(credentialsId);
+                }
+            } else {
+                if (!project.hasPermission(Item.EXTENDED_READ) && !project.hasPermission(CredentialsProvider.USE_ITEM)) {
+                    return result.includeCurrentValue(credentialsId);
+                }
+            }
+            return result
+                    .includeEmptyValue()
+                    .includeMatchingAs(
+                            project instanceof Queue.Task ? Tasks.getAuthenticationOf((Queue.Task) project) : ACL.SYSTEM,
+                            project,
+                            StandardUsernamePasswordCredentials.class,
+                            Collections.<DomainRequirement>emptyList(),
+                            CredentialsMatchers.always())
+                    .includeCurrentValue(credentialsId);
         }
 
-        public FormValidation doCheckTestCaseTrackerId(@QueryParameter Integer value, @QueryParameter String uri,  @QueryParameter String username, @QueryParameter String password, @QueryParameter Integer testCaseParentId) throws IOException {
+        public FormValidation doCheckCredentialsId(@AncestorInPath Item project, @QueryParameter String value, @QueryParameter String uri) throws IOException {
+            // TODO: check if credentials can be used to connect to given url
+
+            return FormValidation.ok();
+        }
+
+        @SuppressWarnings("unused")
+        public FormValidation doCheckTestSetTrackerId(@QueryParameter Integer value, @QueryParameter String uri, @QueryParameter String credentialsId) throws IOException {
+            return validateTrackerType(value, new PluginConfiguration(uri, XUnitUtil.getCredentials(new FreeStyleProject(Jenkins.getInstance(), "fake-" + UUID.randomUUID().toString()), credentialsId)), true, 108);
+        }
+
+        @SuppressWarnings("unused")
+        public FormValidation doCheckTestCaseTrackerId(@QueryParameter Integer value, @QueryParameter String uri, @QueryParameter String credentialsId, @QueryParameter Integer testCaseParentId) throws IOException {
             if (testCaseParentId == null) {
-                return validateTrackerType(value, new PluginConfiguration(uri, username, password), true, 102);
+                return validateTrackerType(value, new PluginConfiguration(uri, XUnitUtil.getCredentials(new FreeStyleProject(Jenkins.getInstance(), "fake-" + UUID.randomUUID().toString()), credentialsId)), true, 102);
             } else {
                 return FormValidation.ok();
             }
         }
 
-        public FormValidation doCheckReleaseId(@QueryParameter Integer value, @QueryParameter String uri,  @QueryParameter String username, @QueryParameter String password) throws IOException {
-            return validateTrackerItemWithTracker(value, new PluginConfiguration(uri, username, password), false, 103);
+        @SuppressWarnings("unused")
+        public FormValidation doCheckReleaseId(@QueryParameter Integer value, @QueryParameter String uri, @QueryParameter String credentialsId) throws IOException {
+            return validateTrackerItemWithTracker(value, new PluginConfiguration(uri, XUnitUtil.getCredentials(new FreeStyleProject(Jenkins.getInstance(), "fake-" + UUID.randomUUID().toString()), credentialsId)), false, 103);
         }
 
-        public FormValidation doCheckTestCaseParentId(@QueryParameter Integer value, @QueryParameter String uri,  @QueryParameter String username, @QueryParameter String password) throws IOException {
-            return validateTrackerItemWithTracker(value, new PluginConfiguration(uri, username, password), false, 102);
+        @SuppressWarnings("unused")
+        public FormValidation doCheckTestCaseParentId(@QueryParameter Integer value, @QueryParameter String uri, @QueryParameter String credentialsId) throws IOException {
+            return validateTrackerItemWithTracker(value, new PluginConfiguration(uri, XUnitUtil.getCredentials(new FreeStyleProject(Jenkins.getInstance(), "fake-" + UUID.randomUUID().toString()), credentialsId)), false, 102);
         }
 
-        public FormValidation doCheckRequirementTrackerId(@QueryParameter Integer value, @QueryParameter String uri,  @QueryParameter String username, @QueryParameter String password, @QueryParameter Integer requirementParentId) throws IOException {
+        @SuppressWarnings("unused")
+        public FormValidation doCheckRequirementTrackerId(@QueryParameter Integer value, @QueryParameter String uri, @QueryParameter String credentialsId, @QueryParameter Integer requirementParentId) throws IOException {
             if (requirementParentId == null) {
-                return validateTrackerType(value, new PluginConfiguration(uri, username, password), false, 5, 10);
+                return validateTrackerType(value, new PluginConfiguration(uri, XUnitUtil.getCredentials(new FreeStyleProject(Jenkins.getInstance(), "fake-" + UUID.randomUUID().toString()), credentialsId)), false, 5, 10);
             } else {
                 return FormValidation.ok();
             }
         }
 
-        public FormValidation doCheckRequirementParentId(@QueryParameter Integer value, @QueryParameter String uri,  @QueryParameter String username, @QueryParameter String password) throws IOException {
-            return validateTrackerItemWithTracker(value, new PluginConfiguration(uri, username, password), false, 5, 10);
+        @SuppressWarnings("unused")
+        public FormValidation doCheckRequirementParentId(@QueryParameter Integer value, @QueryParameter String uri, @QueryParameter String credentialsId) throws IOException {
+            return validateTrackerItemWithTracker(value, new PluginConfiguration(uri, XUnitUtil.getCredentials(new FreeStyleProject(Jenkins.getInstance(), "fake-" + UUID.randomUUID().toString()), credentialsId)), false, 5, 10);
         }
 
-        public FormValidation doCheckTestRunTrackerId(@QueryParameter Integer value, @QueryParameter String uri,  @QueryParameter String username, @QueryParameter String password) throws IOException {
-            return validateTrackerType(value, new PluginConfiguration(uri, username, password), true, 9);
+        @SuppressWarnings("unused")
+        public FormValidation doCheckTestRunTrackerId(@QueryParameter Integer value, @QueryParameter String uri, @QueryParameter String credentialsId) throws IOException {
+            return validateTrackerType(value, new PluginConfiguration(uri, XUnitUtil.getCredentials(new FreeStyleProject(Jenkins.getInstance(), "fake-" + UUID.randomUUID().toString()), credentialsId)), true, 9);
         }
 
-        public FormValidation doCheckTestConfigurationId(@QueryParameter Integer value, @QueryParameter String uri,  @QueryParameter String username, @QueryParameter String password) throws IOException {
-            return validateTrackerItemWithTracker(value, new PluginConfiguration(uri, username, password), true, 109);
+        @SuppressWarnings("unused")
+        public FormValidation doCheckTestConfigurationId(@QueryParameter Integer value, @QueryParameter String uri, @QueryParameter String credentialsId) throws IOException {
+            return validateTrackerItemWithTracker(value, new PluginConfiguration(uri, XUnitUtil.getCredentials(new FreeStyleProject(Jenkins.getInstance(), "fake-" + UUID.randomUUID().toString()), credentialsId)), true, 109);
         }
 
-        public FormValidation doCheckBugTrackerId(@QueryParameter Integer value, @QueryParameter String uri,  @QueryParameter String username, @QueryParameter String password) throws IOException {
-            return validateTrackerType(value, new PluginConfiguration(uri, username, password), false, 2);
+        @SuppressWarnings("unused")
+        public FormValidation doCheckBugTrackerId(@QueryParameter Integer value, @QueryParameter String uri, @QueryParameter String credentialsId) throws IOException {
+            return validateTrackerType(value, new PluginConfiguration(uri, XUnitUtil.getCredentials(new FreeStyleProject(Jenkins.getInstance(), "fake-" + UUID.randomUUID().toString()), credentialsId)), false, 2);
         }
 
         private FormValidation validateTrackerItemWithTracker(Integer value, PluginConfiguration pluginConfiguration, boolean required, Integer... validTrackerTypeIds) {

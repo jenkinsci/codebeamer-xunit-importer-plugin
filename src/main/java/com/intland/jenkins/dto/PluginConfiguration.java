@@ -4,10 +4,11 @@
 
 package com.intland.jenkins.dto;
 
+import com.cloudbees.plugins.credentials.common.StandardUsernamePasswordCredentials;
+
 public class PluginConfiguration {
     private String uri;
-    private String username;
-    private String password;
+    private StandardUsernamePasswordCredentials credentials;
     private Integer testSetTrackerId;
     private Integer testCaseTrackerId;
     private Integer testCaseParentId;
@@ -27,10 +28,9 @@ public class PluginConfiguration {
     public PluginConfiguration() {
     }
 
-    public PluginConfiguration(String uri, String username, String password) {
+    public PluginConfiguration(String uri, StandardUsernamePasswordCredentials credentials) {
         this.uri = uri;
-        this.username = username;
-        this.password = password;
+        this.credentials = credentials;
     }
 
     public String getUri() {
@@ -41,20 +41,16 @@ public class PluginConfiguration {
         this.uri = uri;
     }
 
-    public String getUsername() {
-        return username;
+    public void setCredentials(StandardUsernamePasswordCredentials credentials) {
+        this.credentials = credentials;
     }
 
-    public void setUsername(String username) {
-        this.username = username;
+    public String getUsername() {
+        return credentials.getUsername();
     }
 
     public String getPassword() {
-        return password;
-    }
-
-    public void setPassword(String password) {
-        this.password = password;
+        return credentials.getPassword().getPlainText();
     }
 
     public Integer getTestSetTrackerId() {
