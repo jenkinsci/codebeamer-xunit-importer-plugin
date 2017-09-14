@@ -29,6 +29,7 @@ import hudson.util.FormValidation;
 import hudson.util.ListBoxModel;
 import jenkins.model.Jenkins;
 import jenkins.tasks.SimpleBuildStep;
+import org.jenkinsci.Symbol;
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.DataBoundSetter;
@@ -297,6 +298,7 @@ public class XUnitImporter extends Notifier implements SimpleBuildStep {
         return pluginConfiguration;
     }
 
+    @Symbol("xUnitImporter")
     @Extension
     public static class DescriptorImpl extends BuildStepDescriptor<Publisher> {
 
